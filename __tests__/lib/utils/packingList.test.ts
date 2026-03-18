@@ -189,4 +189,13 @@ describe('calculatePackingList', () => {
     const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
+
+  test('items with negative qty are excluded from results', () => {
+    const booking: BookingRow = { ...BASE_BOOKING }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: -1, is_sub_item: false, parent_item_id: null },
+    ]
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    expect(result).toHaveLength(0)
+  })
 })

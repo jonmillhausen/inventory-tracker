@@ -63,7 +63,7 @@ export function calculatePackingList(
   // Step 7: Build a map of sub-item → parent_item_id from bookingItems
   const parentMap = new Map<string, string | null>()
   const isSubMap = new Map<string, boolean>()
-  for (const bi of bookingItems) {
+  for (const bi of activeItems) {
     parentMap.set(bi.item_id, bi.parent_item_id)
     isSubMap.set(bi.item_id, bi.is_sub_item)
   }
