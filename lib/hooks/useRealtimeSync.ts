@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { EQUIPMENT_KEY, SUB_ITEMS_KEY } from '@/lib/queries/equipment'
 import { BOOKINGS_KEY } from '@/lib/queries/bookings'
+import { CHAINS_KEY } from '@/lib/queries/chains'
 
 const SERVICE_MAPPINGS_KEY = ['service_mappings']
 
@@ -45,10 +46,18 @@ export function useRealtimeSync() {
       })
       .subscribe()
 
+    const chainsChannel = supabase
+      .channel('rt-chains')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chains' }, () => {
+        qc.invalidateQueries({ queryKey: CHAINS_KEY })
+      })
+      .subscribe()
+
     return () => {
       supabase.removeChannel(bookingsChannel)
       supabase.removeChannel(equipmentChannel)
       supabase.removeChannel(mappingsChannel)
+      supabase.removeChannel(chainsChannel)
     }
   }, [qc])
 }
