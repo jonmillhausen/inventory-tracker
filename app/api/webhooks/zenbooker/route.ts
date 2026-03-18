@@ -22,16 +22,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Step 2: Payload size check (<1MB)
-  const contentLength = parseInt(request.headers.get('content-length') ?? '0', 10)
-  if (contentLength > 1_000_000) {
+  // Read body once, check size, then parse as JSON
+  let bodyBuffer: ArrayBuffer
+  try {
+    bodyBuffer = await request.arrayBuffer()
+  } catch {
+    return NextResponse.json({ error: 'Failed to read body' }, { status: 400 })
+  }
+
+  if (bodyBuffer.byteLength > 1_000_000) {
     return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
   }
 
-  // Step 3: Parse payload
   let payload: ZenbookerPayload
   try {
-    payload = await request.json() as ZenbookerPayload
+    payload = JSON.parse(new TextDecoder().decode(bodyBuffer)) as ZenbookerPayload
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
