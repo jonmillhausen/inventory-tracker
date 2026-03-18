@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useServiceMappings, useDeleteServiceMapping } from '@/lib/queries/serviceMappings'
 import { useEquipment } from '@/lib/queries/equipment'
 import { ServiceMappingFormModal } from '@/components/modals/ServiceMappingFormModal'
@@ -25,16 +25,32 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
   const [editMapping, setEditMapping] = useState<ServiceMappingRow | null>(null)
   const [addModifierFor, setAddModifierFor] = useState<{ serviceId: string; serviceName: string } | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
-  const equipById = new Map(equipment.map(e => [e.id, e]))
+  const equipById = useMemo(
+    () => new Map(equipment.map(e => [e.id, e])),
+    [equipment]
+  )
 
-  const groups = new Map<string, { name: string; rows: ServiceMappingRow[] }>()
-  for (const m of mappings) {
-    const existing = groups.get(m.zenbooker_service_id)
-    if (existing) {
-      existing.rows.push(m)
-    } else {
-      groups.set(m.zenbooker_service_id, { name: m.zenbooker_service_name, rows: [m] })
+  const groups = useMemo(() => {
+    const map = new Map<string, { name: string; rows: ServiceMappingRow[] }>()
+    for (const m of mappings) {
+      const existing = map.get(m.zenbooker_service_id)
+      if (existing) {
+        existing.rows.push(m)
+      } else {
+        map.set(m.zenbooker_service_id, { name: m.zenbooker_service_name, rows: [m] })
+      }
+    }
+    return map
+  }, [mappings])
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Delete this mapping?')) return
+    try {
+      await deleteMapping.mutateAsync(id)
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete mapping')
     }
   }
 
@@ -52,6 +68,10 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
         <h1 className="text-xl font-semibold">Service Mappings</h1>
         <Button onClick={() => setShowCreate(true)}>Add Mapping</Button>
       </div>
+
+      {deleteError && (
+        <p className="text-red-600 text-sm">{deleteError}</p>
+      )}
 
       <div className="border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
@@ -84,7 +104,7 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <Button size="sm" variant="outline" onClick={() => setEditMapping(row)}>Edit</Button>
-                        <Button size="sm" variant="outline" onClick={() => deleteMapping.mutate(row.id)}>Delete</Button>
+                        <Button size="sm" variant="outline" onClick={() => handleDelete(row.id)}>Delete</Button>
                       </div>
                     </td>
                   </tr>
@@ -123,7 +143,7 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
                       <td className="px-4 py-2">
                         <div className="flex gap-2">
                           <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => setEditMapping(row)}>Edit</Button>
-                          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => deleteMapping.mutate(row.id)}>Delete</Button>
+                          <Button size="sm" variant="outline" className="h-6 text-xs" onClick={() => handleDelete(row.id)}>Delete</Button>
                         </div>
                       </td>
                     </tr>

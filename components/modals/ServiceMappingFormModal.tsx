@@ -38,6 +38,11 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    const qty = parseInt(defaultQty, 10)
+    if (isNaN(qty) || qty < 0) {
+      setError('Default quantity must be a whole number')
+      return
+    }
     try {
       const body = {
         zenbooker_service_id: serviceId.trim(),
@@ -45,7 +50,7 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
         zenbooker_modifier_id: modifierId.trim() || null,
         zenbooker_modifier_name: modifierName.trim() || null,
         item_id: itemId,
-        default_qty: parseInt(defaultQty, 10),
+        default_qty: qty,
         use_customer_qty: useCustomerQty,
         notes: notes.trim(),
       }
@@ -56,43 +61,43 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
       }
       onClose()
     } catch (err) {
-      setError(String(err))
+      setError(err instanceof Error ? err.message : 'An error occurred')
     }
   }
 
   const activeEquipment = equipment.filter(e => e.is_active)
 
   return (
-    <Dialog open onOpenChange={onClose}>
+    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Service Mapping' : 'Add Service Mapping'}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Zenbooker Service ID</label>
-            <Input value={serviceId} onChange={e => setServiceId(e.target.value)} required
+            <label htmlFor="service-id" className="block text-sm font-medium mb-1">Zenbooker Service ID</label>
+            <Input id="service-id" value={serviceId} onChange={e => setServiceId(e.target.value)} required
               placeholder="e.g. svc_foam_party" disabled={isEdit} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Service Name (display)</label>
-            <Input value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Foam Party" />
+            <label htmlFor="service-name" className="block text-sm font-medium mb-1">Service Name (display)</label>
+            <Input id="service-name" value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="Foam Party" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Modifier ID (leave blank for standalone)</label>
-            <Input value={modifierId} onChange={e => setModifierId(e.target.value)}
+            <label htmlFor="modifier-id" className="block text-sm font-medium mb-1">Modifier ID (leave blank for standalone)</label>
+            <Input id="modifier-id" value={modifierId} onChange={e => setModifierId(e.target.value)}
               placeholder="e.g. mod_laser_tag" disabled={isEdit} />
           </div>
           {modifierId && (
             <div>
-              <label className="block text-sm font-medium mb-1">Modifier Name (display)</label>
-              <Input value={modifierName} onChange={e => setModifierName(e.target.value)} placeholder="Laser Tag" />
+              <label htmlFor="modifier-name" className="block text-sm font-medium mb-1">Modifier Name (display)</label>
+              <Input id="modifier-name" value={modifierName} onChange={e => setModifierName(e.target.value)} placeholder="Laser Tag" />
             </div>
           )}
           <div>
-            <label className="block text-sm font-medium mb-1">Equipment Item</label>
+            <label htmlFor="equipment-item" className="block text-sm font-medium mb-1">Equipment Item</label>
             <Select value={itemId} onValueChange={setItemId} required>
-              <SelectTrigger><SelectValue placeholder="Select equipment..." /></SelectTrigger>
+              <SelectTrigger id="equipment-item"><SelectValue placeholder="Select equipment..." /></SelectTrigger>
               <SelectContent>
                 {activeEquipment.map(e => (
                   <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
@@ -102,8 +107,8 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
           </div>
           <div className="flex gap-4">
             <div className="flex-1">
-              <label className="block text-sm font-medium mb-1">Default Qty</label>
-              <Input type="number" min="0" value={defaultQty} onChange={e => setDefaultQty(e.target.value)} required />
+              <label htmlFor="default-qty" className="block text-sm font-medium mb-1">Default Qty</label>
+              <Input id="default-qty" type="number" min="0" value={defaultQty} onChange={e => setDefaultQty(e.target.value)} required />
             </div>
             <div className="flex items-end pb-1">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -115,8 +120,8 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Notes</label>
-            <Input value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
+            <label htmlFor="notes" className="block text-sm font-medium mb-1">Notes</label>
+            <Input id="notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Optional notes" />
           </div>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex justify-end gap-2">
