@@ -98,26 +98,26 @@ export async function GET(
     day: 'numeric',
   })
 
-  const parentTableRows = parentItems
-    .map(item => `<tr><td class="check"></td><td>${escapeHtml(item.name)}</td><td>${item.qty}</td></tr>`)
-    .join('\n')
+  // Build equipment table rows with sub-items grouped under parents
+  const subItemsByParent = new Map<string, typeof subItemRows[number][]>()
+  for (const si of subItemRows) {
+    const list = subItemsByParent.get(si.parentItemId ?? '') ?? []
+    list.push(si)
+    subItemsByParent.set(si.parentItemId ?? '', list)
+  }
 
-  const subItemTableRows = subItemRows
-    .map(item => `<tr><td class="check"></td><td>${escapeHtml(item.name)}</td><td>${item.qty}</td></tr>`)
+  const equipmentTableRows = parentItems
+    .map(item => {
+      const childRows = (subItemsByParent.get(item.itemId) ?? [])
+        .map(si => `<tr style="background:#f9f9f9"><td class="check"></td><td style="padding-left:24px"><em>${escapeHtml(si.name)}</em></td><td>${si.qty}</td></tr>`)
+        .join('\n')
+      return `<tr><td class="check"></td><td>${escapeHtml(item.name)}</td><td>${item.qty}</td></tr>\n${childRows}`
+    })
     .join('\n')
 
   const eventTableRows = chainBookings
-    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${b.start_time}–${b.end_time}</td><td>${b.event_type}</td><td>${escapeHtml(b.address)}</td></tr>`)
+    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${escapeHtml(b.start_time)}–${escapeHtml(b.end_time)}</td><td>${escapeHtml(b.event_type)}</td><td>${escapeHtml(b.address)}</td></tr>`)
     .join('\n')
-
-  const subItemSection = subItemRows.length > 0
-    ? `
-  <h2>Support Equipment</h2>
-  <table>
-    <tr><th class="check">✓</th><th>Item</th><th>Qty</th></tr>
-    ${subItemTableRows}
-  </table>`
-    : ''
 
   const html = `<!DOCTYPE html>
 <html>
@@ -144,10 +144,9 @@ export async function GET(
   ${parentItems.length > 0
     ? `<table>
     <tr><th class="check">✓</th><th>Equipment</th><th>Qty</th></tr>
-    ${parentTableRows}
+    ${equipmentTableRows}
   </table>`
     : '<p>No equipment for this chain on this date.</p>'}
-  ${subItemSection}
 
   <h2>Events (${chainBookings.length})</h2>
   ${chainBookings.length > 0
