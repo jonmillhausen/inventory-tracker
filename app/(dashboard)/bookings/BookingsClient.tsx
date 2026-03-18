@@ -11,6 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import type { Database, UserRole } from '@/lib/types/database.types'
 import type { BookingsData } from '@/lib/queries/bookings'
 import type { BookingItemWithName } from '@/components/modals/BookingFormModal'
+import { useWebhookLogForBooking } from '@/lib/queries/webhookLogs'
+import { ServiceMappingFormModal } from '@/components/modals/ServiceMappingFormModal'
+import { useEquipment } from '@/lib/queries/equipment'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
@@ -37,6 +40,69 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   willcall: 'Will Call',
 }
 
+function NeedsReviewPanel({ bookingId, onClose, onCreateMapping }: {
+  bookingId: string
+  onClose: () => void
+  onCreateMapping: (serviceId: string, serviceName: string) => void
+}) {
+  const { data: log, isLoading } = useWebhookLogForBooking(bookingId)
+  const [showPayload, setShowPayload] = useState(false)
+
+  const unmappedNames = log?.result_detail
+    ? log.result_detail.split(', ').filter(Boolean)
+    : []
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 mx-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-lg">Needs Review</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        {isLoading && <p className="text-gray-500 text-sm">Loading webhook details...</p>}
+        {!isLoading && !log && (
+          <p className="text-gray-500 text-sm">No webhook log found for this booking. It may have been created manually or the log was not captured.</p>
+        )}
+        {log && (
+          <div className="space-y-4">
+            {unmappedNames.length > 0 && (
+              <div>
+                <p className="text-sm font-medium text-yellow-800 mb-2">Unmapped Zenbooker Services:</p>
+                <ul className="space-y-1">
+                  {unmappedNames.map(name => (
+                    <li key={name} className="flex items-center justify-between bg-yellow-50 rounded px-3 py-1.5">
+                      <span className="text-sm">{name}</span>
+                      <button
+                        onClick={() => onCreateMapping('', name)}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        Create Mapping
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div>
+              <button
+                onClick={() => setShowPayload(p => !p)}
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                {showPayload ? 'Hide' : 'Show'} Raw Payload
+              </button>
+              {showPayload && (
+                <pre className="mt-2 bg-gray-50 rounded p-3 text-xs overflow-auto max-h-64">
+                  {JSON.stringify(log.raw_payload, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function BookingsClient({ initialData, initialChains, role }: Props) {
   const { data } = useBookings(initialData)
   const { data: chains = [] } = useChains(initialChains)
@@ -47,6 +113,9 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
   const [showCreate, setShowCreate] = useState(false)
   const [editBooking, setEditBooking] = useState<(BookingRow & { items: BookingItemWithName[] }) | null>(null)
   const [assigningChainForId, setAssigningChainForId] = useState<string | null>(null)
+  const [reviewingBookingId, setReviewingBookingId] = useState<string | null>(null)
+  const [createMappingPreset, setCreateMappingPreset] = useState<{ serviceId: string; serviceName: string } | null>(null)
+  const { data: allEquipment = [] } = useEquipment()
 
   // Filters
   const [filterDate, setFilterDate] = useState('')
@@ -270,6 +339,13 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center justify-end gap-1">
+                      {booking.status === 'needs_review' && canWrite(role) && (
+                        <Button size="sm" variant="outline"
+                          className="h-7 px-2 text-xs text-yellow-700 border-yellow-300"
+                          onClick={() => setReviewingBookingId(booking.id)}>
+                          Review
+                        </Button>
+                      )}
                       {canWrite(role) && (
                         <>
                           <Button
@@ -341,6 +417,24 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
         <BookingFormModal
           booking={editBooking}
           onClose={() => setEditBooking(null)}
+        />
+      )}
+      {reviewingBookingId && (
+        <NeedsReviewPanel
+          bookingId={reviewingBookingId}
+          onClose={() => setReviewingBookingId(null)}
+          onCreateMapping={(serviceId, serviceName) => {
+            setCreateMappingPreset({ serviceId, serviceName })
+            setReviewingBookingId(null)
+          }}
+        />
+      )}
+      {createMappingPreset && (
+        <ServiceMappingFormModal
+          prefillServiceId={createMappingPreset.serviceId}
+          prefillServiceName={createMappingPreset.serviceName}
+          equipment={allEquipment}
+          onClose={() => setCreateMappingPreset(null)}
         />
       )}
     </div>
