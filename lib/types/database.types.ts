@@ -22,6 +22,7 @@ export interface Database {
           role: UserRole
         }
         Update: Partial<{ full_name: string; role: UserRole }>
+        Relationships: []
       }
       equipment: {
         Row: {
@@ -51,6 +52,7 @@ export interface Database {
           custom_setup_min: number | null
           custom_cleanup_min: number | null
         }>
+        Relationships: []
       }
       equipment_sub_items: {
         Row: {
@@ -70,6 +72,7 @@ export interface Database {
           is_active?: boolean
         }
         Update: Partial<{ name: string; total_qty: number; is_active: boolean }>
+        Relationships: []
       }
       issue_flag_items: {
         Row: {
@@ -94,6 +97,7 @@ export interface Database {
           resolved_at: string | null
           resolved_action: ResolvedAction | null
         }>
+        Relationships: []
       }
       out_of_service_items: {
         Row: {
@@ -115,6 +119,7 @@ export interface Database {
           returned_at?: string | null
         }
         Update: Partial<{ return_date: string | null; returned_at: string | null }>
+        Relationships: []
       }
       bookings: {
         Row: {
@@ -160,6 +165,7 @@ export interface Database {
           address: string
           notes: string
         }>
+        Relationships: []
       }
       booking_items: {
         Row: {
@@ -178,6 +184,7 @@ export interface Database {
           parent_item_id?: string | null
         }
         Update: Partial<{ qty: number }>
+        Relationships: []
       }
       chains: {
         Row: {
@@ -193,6 +200,7 @@ export interface Database {
           is_active?: boolean
         }
         Update: Partial<{ name: string; color: string; is_active: boolean }>
+        Relationships: []
       }
       chain_mappings: {
         Row: {
@@ -213,6 +221,7 @@ export interface Database {
           chain_id: string
           notes: string
         }>
+        Relationships: []
       }
       service_mappings: {
         Row: {
@@ -244,6 +253,7 @@ export interface Database {
           use_customer_qty: boolean
           notes: string
         }>
+        Relationships: []
       }
       webhook_logs: {
         Row: {
@@ -270,8 +280,11 @@ export interface Database {
           result_detail: string | null
           booking_id: string | null
         }>
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
     Enums: {
       user_role: UserRole
       booking_status: BookingStatus
