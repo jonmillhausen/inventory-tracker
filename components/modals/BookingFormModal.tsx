@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCreateBooking, useUpdateBooking } from '@/lib/queries/bookings'
 import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
 import { useChains } from '@/lib/queries/chains'
-import type { Database } from '@/lib/types/database.types'
+import type { Database, EventType } from '@/lib/types/database.types'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
@@ -47,7 +47,7 @@ export function BookingFormModal({ booking, onClose }: Props) {
   const [startTime, setStartTime] = useState(booking?.start_time ?? '')
   const [endTime, setEndTime] = useState(booking?.end_time ?? '')
   const [address, setAddress] = useState(booking?.address ?? '')
-  const [eventType, setEventType] = useState<string>(booking?.event_type ?? 'dropoff')
+  const [eventType, setEventType] = useState<EventType>(booking?.event_type ?? 'dropoff')
   const [chain, setChain] = useState<string>(booking?.chain ?? '')
   const [notes, setNotes] = useState(booking?.notes ?? '')
   const [error, setError] = useState<string | null>(null)

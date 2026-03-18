@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import type { Database } from '@/lib/types/database.types'
+import type { Database, EventType } from '@/lib/types/database.types'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
@@ -52,7 +52,7 @@ export interface CreateBookingInput {
   start_time: string
   end_time: string
   address: string
-  event_type: string
+  event_type: EventType
   chain?: string | null
   notes?: string
   items: BookingItemInput[]
@@ -66,7 +66,7 @@ export interface UpdateBookingInput {
   start_time?: string
   end_time?: string
   address?: string
-  event_type?: string
+  event_type?: EventType
   chain?: string | null
   status?: string
   notes?: string
