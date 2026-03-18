@@ -13,6 +13,20 @@ export async function POST(
   const { id } = await params
   const supabase = await createClient()
 
+  // Verify booking exists
+  const { error: existsError } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('id', id)
+    .single()
+
+  if (existsError?.code === 'PGRST116') {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  }
+  if (existsError) {
+    return NextResponse.json({ error: existsError.message }, { status: 500 })
+  }
+
   let body: unknown
   try {
     body = await request.json()

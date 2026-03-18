@@ -12,6 +12,20 @@ export async function PATCH(
   const { id } = await params
   const supabase = await createClient()
 
+  // Verify booking exists
+  const { error: existsError } = await supabase
+    .from('bookings')
+    .select('id')
+    .eq('id', id)
+    .single()
+
+  if (existsError?.code === 'PGRST116') {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+  }
+  if (existsError) {
+    return NextResponse.json({ error: existsError.message }, { status: 500 })
+  }
+
   let body: unknown
   try {
     body = await request.json()
@@ -43,7 +57,13 @@ export async function PATCH(
   if (address !== undefined) updateFields.address = address
   if (event_type !== undefined) updateFields.event_type = event_type
   if (chain !== undefined) updateFields.chain = chain
-  if (status !== undefined) updateFields.status = status
+  if (status !== undefined) {
+    const VALID_STATUSES = ['confirmed', 'canceled', 'completed', 'needs_review']
+    if (typeof status !== 'string' || !VALID_STATUSES.includes(status)) {
+      return NextResponse.json({ error: 'Invalid status value' }, { status: 400 })
+    }
+    updateFields.status = status
+  }
   if (notes !== undefined) updateFields.notes = notes
 
   if (Object.keys(updateFields).length > 0) {
