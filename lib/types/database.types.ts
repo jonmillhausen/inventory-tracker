@@ -140,7 +140,7 @@ export interface Database {
           updated_at: string
         }
         Insert: {
-          zenbooker_job_id: string
+          zenbooker_job_id: string | null
           customer_name: string
           event_date: string
           end_date?: string | null
