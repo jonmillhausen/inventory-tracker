@@ -26,7 +26,13 @@ export async function PATCH(
     .eq('id', id)
     .single()
 
-  if (fetchError || !flagRow) {
+  if (fetchError) {
+    if (fetchError.code === 'PGRST116') {
+      return NextResponse.json({ error: 'Flag not found' }, { status: 404 })
+    }
+    return NextResponse.json({ error: fetchError.message }, { status: 500 })
+  }
+  if (!flagRow) {
     return NextResponse.json({ error: 'Flag not found' }, { status: 404 })
   }
 
