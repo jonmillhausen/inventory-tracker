@@ -17,17 +17,8 @@ export default async function SettingsPage() {
     .eq('id', user!.id)
     .single()
 
-  const safeProfile = profile as { role: string } | null
-
-  if (!safeProfile || !canAdmin(safeProfile.role as UserRole)) {
-    return (
-      <div className="text-center py-16">
-        <h2 className="text-xl font-semibold text-gray-700">Access Denied</h2>
-        <p className="text-gray-500 mt-2">
-          You don&apos;t have permission to access Settings.
-        </p>
-      </div>
-    )
+  if (!profile || !canAdmin((profile as { role: string }).role as UserRole)) {
+    redirect('/availability')
   }
 
   redirect('/settings/mappings/service')

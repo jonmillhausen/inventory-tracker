@@ -30,14 +30,12 @@ export default async function DashboardLayout({
     redirect('/login')
   }
 
-  const safeProfile = profile as { full_name: string; role: string }
-
   return (
     <QueryProvider>
       <div className="flex h-screen overflow-hidden">
-        <Sidebar role={safeProfile.role as UserRole} />
+        <Sidebar role={(profile as { full_name: string; role: string }).role as UserRole} />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-          <TopBar userName={safeProfile.full_name} />
+          <TopBar userName={(profile as { full_name: string; role: string }).full_name} />
           <main className="flex-1 overflow-auto p-6">{children}</main>
         </div>
       </div>
