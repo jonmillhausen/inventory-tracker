@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { calculateAvailability } from '@/lib/utils/availability'
@@ -22,7 +22,7 @@ function today() {
 
 function availabilityBadge(available: number, total: number) {
   if (available <= 0) return <Badge variant="destructive">0 / {total}</Badge>
-  if (available <= Math.ceil(total * 0.3))
+  if (available <= total * 0.3)
     return <Badge className="bg-yellow-500 text-white">{available} / {total}</Badge>
   return <Badge className="bg-green-600 text-white">{available} / {total}</Badge>
 }
@@ -77,8 +77,8 @@ export function AvailabilityClient({ initialEquipment, initialSubItems, initialB
               </tr>
             )}
             {rows.map(row => (
-              <>
-                <tr key={row.id} className="hover:bg-gray-50">
+              <React.Fragment key={row.id}>
+                <tr className="hover:bg-gray-50">
                   <td className="px-4 py-3 font-medium">{row.name}</td>
                   <td className="px-4 py-3 text-center">
                     {availabilityBadge(row.available_qty, row.total_qty)}
@@ -110,7 +110,7 @@ export function AvailabilityClient({ initialEquipment, initialSubItems, initialB
                     </td>
                   </tr>
                 ))}
-              </>
+              </React.Fragment>
             ))}
           </tbody>
         </table>
