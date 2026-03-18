@@ -55,7 +55,13 @@ export async function PATCH(
   if (start_time !== undefined) updateFields.start_time = start_time
   if (end_time !== undefined) updateFields.end_time = end_time
   if (address !== undefined) updateFields.address = address
-  if (event_type !== undefined) updateFields.event_type = event_type
+  if (event_type !== undefined) {
+    const VALID_EVENT_TYPES = ['coordinated', 'dropoff', 'pickup', 'willcall']
+    if (typeof event_type !== 'string' || !VALID_EVENT_TYPES.includes(event_type)) {
+      return NextResponse.json({ error: 'event_type must be one of: coordinated, dropoff, pickup, willcall' }, { status: 400 })
+    }
+    updateFields.event_type = event_type
+  }
   if (chain !== undefined) updateFields.chain = chain
   if (status !== undefined) {
     const VALID_STATUSES = ['confirmed', 'canceled', 'completed', 'needs_review']

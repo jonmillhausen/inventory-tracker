@@ -71,10 +71,17 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
     setPrintError(null)
     setIsPrinting(true)
     try {
+      // Find the end_date from active bookings (use the latest end_date if multiple bookings)
+      const activeForChain = bookings.filter(b => b.chain === selectedChain && isBookingActiveOnDate(b, selectedDate))
+      const end_date = activeForChain.reduce<string | null>((latest, b) => {
+        const effectiveEnd = b.end_date ?? b.event_date
+        return latest === null || effectiveEnd > latest ? effectiveEnd : latest
+      }, null) ?? selectedDate
+
       const res = await fetch('/api/packing-list/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chain: selectedChain, date: selectedDate }),
+        body: JSON.stringify({ chain: selectedChain, date: selectedDate, end_date }),
       })
       if (!res.ok) throw new Error(await res.text())
       const { url } = await res.json()
