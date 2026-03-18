@@ -99,13 +99,15 @@ Extended profile for Supabase Auth users.
 | `id` | text | Slug, e.g. `foam_machine` |
 | `name` | text | |
 | `total_qty` | int | |
-| `out_of_service` | int | Count, derived from `out_of_service_items` |
-| `issue_flag` | int | Count, derived from `issue_flag_items` |
+| `out_of_service` | int | Maintained by Postgres trigger on `out_of_service_items` (SUM of qty where item_id = equipment.id AND item_type = 'equipment' AND returned_at IS NULL) |
+| `issue_flag` | int | Maintained by Postgres trigger on `issue_flag_items` (SUM of qty where item_id = equipment.id AND item_type = 'equipment' AND resolved_at IS NULL) |
 | `is_active` | bool | |
 | `custom_setup_min` | int | Nullable; defaults to 45 in app logic |
 | `custom_cleanup_min` | int | Nullable; defaults to 45 in app logic |
 | `created_at` | timestamptz | |
 | `updated_at` | timestamptz | |
+
+Triggers on `issue_flag_items` and `out_of_service_items` recalculate and write back the counts on INSERT, UPDATE, and DELETE. The same trigger handles both `equipment` and `equipment_sub_items` rows by checking `item_type`.
 
 ### `equipment_sub_items`
 
@@ -115,8 +117,8 @@ Extended profile for Supabase Auth users.
 | `parent_id` | text | FK → equipment |
 | `name` | text | |
 | `total_qty` | int | |
-| `out_of_service` | int | |
-| `issue_flag` | int | |
+| `out_of_service` | int | Maintained by same trigger as equipment.out_of_service |
+| `issue_flag` | int | Maintained by same trigger as equipment.issue_flag |
 | `is_active` | bool | |
 
 ### `issue_flag_items`
@@ -124,12 +126,15 @@ Extended profile for Supabase Auth users.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | |
-| `item_id` | text | Equipment or sub-item id |
+| `item_id` | text | References equipment.id or equipment_sub_items.id depending on item_type |
+| `item_type` | enum | `equipment \| sub_item` — disambiguates which table item_id references |
 | `qty` | int | Number of units flagged in this entry |
 | `note` | text | |
 | `reported_at` | timestamptz | |
 | `resolved_at` | timestamptz | Nullable |
 | `resolved_action` | enum | `cleared \| moved_to_oos`; nullable |
+
+No FK constraint on `item_id` — enforced at application layer due to the polymorphic reference. `item_type` is always set by the application and used by the trigger to route the count update to the correct table.
 
 **RLS:** Read access granted to all authenticated roles (required for Realtime broadcast to work cross-session — coordinator flags equipment on-site, admin/sales see count update in real time on the Availability and Equipment tabs).
 
@@ -138,12 +143,15 @@ Extended profile for Supabase Auth users.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | uuid | |
-| `item_id` | text | Equipment or sub-item id |
+| `item_id` | text | References equipment.id or equipment_sub_items.id depending on item_type |
+| `item_type` | enum | `equipment \| sub_item` — disambiguates which table item_id references |
 | `qty` | int | Number of units in this OOS entry |
 | `note` | text | |
 | `return_date` | date | Nullable |
 | `created_at` | timestamptz | |
 | `returned_at` | timestamptz | Nullable |
+
+No FK constraint on `item_id` — same polymorphic reference pattern as `issue_flag_items`.
 
 ### `bookings`
 
@@ -156,7 +164,7 @@ Extended profile for Supabase Auth users.
 | `end_date` | date | Nullable; multi-day bookings |
 | `start_time` | time | |
 | `end_time` | time | |
-| `chain` | text | FK → chains |
+| `chain` | text | Nullable FK → chains; null when no chain is assigned (e.g., webhook arrives before chain mapping exists) |
 | `status` | enum | `confirmed \| canceled \| completed \| needs_review` |
 | `event_type` | enum | `coordinated \| dropoff \| pickup \| willcall` |
 | `source` | enum | `webhook \| manual` |
@@ -173,10 +181,10 @@ Extended profile for Supabase Auth users.
 |---|---|---|
 | `id` | uuid | |
 | `booking_id` | uuid | FK → bookings |
-| `item_id` | text | FK → equipment |
+| `item_id` | text | No FK constraint — references equipment.id when is_sub_item = false, equipment_sub_items.id when is_sub_item = true; enforced at application layer |
 | `qty` | int | |
 | `is_sub_item` | bool | |
-| `parent_item_id` | text | Nullable FK → equipment; populated when is_sub_item = true |
+| `parent_item_id` | text | Nullable; references equipment.id when is_sub_item = true; no FK constraint (same polymorphic pattern) |
 
 ### `chains`
 
@@ -213,6 +221,11 @@ Maps Zenbooker services and modifiers to inventory items. Bundles use multiple r
 | `use_customer_qty` | bool | If true, pull qty from payload; if false, use default_qty |
 | `notes` | text | |
 
+**Unique constraints:**
+- `UNIQUE (zenbooker_service_id) WHERE zenbooker_modifier_id IS NULL` — prevents duplicate standalone service mappings
+- `UNIQUE (zenbooker_service_id, zenbooker_modifier_id) WHERE zenbooker_modifier_id IS NOT NULL` — prevents duplicate bundle modifier mappings
+- The CRUD UI enforces these constraints and surfaces a clear error if a duplicate is attempted.
+
 ### `webhook_logs`
 
 | Column | Type | Notes |
@@ -222,8 +235,8 @@ Maps Zenbooker services and modifiers to inventory items. Bundles use multiple r
 | `zenbooker_job_id` | text | |
 | `action` | text | `job_created \| job_rescheduled \| job_cancelled \| service_order_edited \| recurring_booking_created \| recurring_booking_canceled \| unrecognized` |
 | `raw_payload` | jsonb | Full Zenbooker payload |
-| `result` | enum | `success \| error \| unmapped_service` |
-| `result_detail` | text | Error message or unmapped service name |
+| `result` | enum | `success \| error \| unmapped_service \| skipped` — `skipped` used for recurring events and unrecognized action types (expected, not an error) |
+| `result_detail` | text | For `error`: exception message. For `unmapped_service`: comma-separated list of unmapped Zenbooker service/modifier names. For `skipped`: reason string (e.g., "unrecognized action: recurring_booking_updated"). |
 | `booking_id` | uuid | Nullable FK → bookings |
 
 ---
@@ -274,7 +287,9 @@ Maps Zenbooker services and modifiers to inventory items. Bundles use multiple r
 | `service_order_edited` | Full pipeline; re-run mapping resolution on new service list; flip to needs_review if new unmapped service introduced even if original booking was confirmed |
 | `recurring_booking_created` | Log to webhook_logs only; return 200 |
 | `recurring_booking_canceled` | Log to webhook_logs only; return 200 |
-| Unrecognized | Log result = error, return 200 |
+| Unrecognized | Log result = skipped, result_detail = "unrecognized action: [value]", return 200 |
+| `recurring_booking_created` | Log result = skipped, return 200 |
+| `recurring_booking_canceled` | Log result = skipped, return 200 |
 
 **Note on recurring bookings:** Zenbooker generates individual `job_created` events for each occurrence, which the existing pipeline handles. Recurring-level events are logged for visibility. Confirm this behavior during testing.
 
@@ -333,6 +348,8 @@ When an admin saves a new service mapping:
 - Staff: read access to all dashboard tabs; write access limited to packing list checkboxes, issue flag creation, chain field on bookings, and date filtering
 - Read-only: all tabs visible, all write actions hidden/disabled
 
+**Staff chain-assignment — RLS limitation:** Supabase RLS does not support column-level restrictions. Staff chain assignment is implemented via a dedicated API route `POST /api/bookings/[id]/assign-chain` that validates the caller's role server-side (allows admin, sales, staff) and executes only a `UPDATE bookings SET chain = ? WHERE id = ?`. All other booking mutation routes (create, edit, cancel, delete) check for admin or sales role before executing. This is the only booking field Staff can write through the API; all other fields are rejected at the route level, not RLS.
+
 ### Component Architecture
 - `app/(dashboard)/layout.tsx` — sidebar nav + top bar (Server Component, renders role-appropriate nav items)
 - Each tab: Server Component fetches initial data → passes as `initialData` to Client Component
@@ -348,7 +365,8 @@ When an admin saves a new service mapping:
 
 ### Needs Review Flow
 - Banner in Bookings tab: "X bookings need attention" when `needs_review` bookings exist
-- Panel shows unmapped service name + raw webhook payload + inline button to create missing mapping
+- Panel queries `webhook_logs` by `booking_id` to retrieve `result_detail` (comma-separated unmapped service names) and `raw_payload`
+- Panel displays: unmapped service names, raw payload (expandable), inline button to create the missing mapping
 - On save, batch re-process triggers automatically (non-blocking)
 
 ---
@@ -359,6 +377,8 @@ When an admin saves a new service mapping:
 - `QueryClientProvider` wraps the dashboard layout
 - Server Components fetch initial data → passed as `initialData` — no loading flash on first render
 - Query keys: `['bookings']`, `['bookings', date]`, `['equipment']`, `['service_mappings']`, `['webhook_logs']`
+
+**Note:** `['webhook_logs']` has no Realtime subscription. The webhook logs admin page is a low-frequency diagnostic screen; manual refresh (or a user-triggered refetch button) is acceptable behavior. Adding a Realtime subscription for logs is unnecessary complexity.
 
 ### `useRealtimeSync` Hook
 
@@ -394,7 +414,7 @@ All subscriptions cleaned up on unmount.
 **Route:** `GET /api/packing-list/[token]/[chain]/[date]`
 
 - **No auth required** — bookmarkable by staff on phones/tablets
-- **Token:** HMAC derived from `server_secret + chain + date`; valid for the date in the URL ± 1 day (3-day window)
+- **Token:** HMAC derived from `server_secret + chain + event_date + end_date` (end_date defaults to event_date if null); valid from `(event_date - 1 day)` through `(end_date + 1 day)` — covers multi-day bookings so a bookmark created on day one remains valid through the last day of the event
 - **Content:** Server-side rendered HTML with `Content-Type: text/html`
 - **Structure:** Parent equipment items with sub-items grouped underneath as collapsible "[Parent Name] Supplies" — matches the Chain Loading screen structure exactly
 - Returns 403 for invalid/expired tokens
