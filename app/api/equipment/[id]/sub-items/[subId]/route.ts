@@ -13,12 +13,13 @@ export async function PATCH(
   if (auth instanceof NextResponse) return auth
 
   const { subId } = await params
-  const body = await request.json() as SubItemUpdate
+  const body = await request.json()
+  const { name, total_qty, is_active } = body
 
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('equipment_sub_items')
-    .update(body)
+    .update({ name, total_qty, is_active })
     .eq('id', subId)
     .select()
     .single()
