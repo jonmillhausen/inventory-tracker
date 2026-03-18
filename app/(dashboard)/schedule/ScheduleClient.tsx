@@ -86,7 +86,7 @@ export function ScheduleClient({ initialData, initialChains }: Props) {
       })
     }
 
-    return chainRows.filter(r => r.bookings.length > 0 || chains.find(c => c.id === r.id))
+    return chainRows.filter(r => r.bookings.length > 0)
   }, [chains, activeBookings])
 
   return (
