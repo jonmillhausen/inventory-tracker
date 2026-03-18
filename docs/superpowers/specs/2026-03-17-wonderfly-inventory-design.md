@@ -259,7 +259,7 @@ Maps Zenbooker services and modifiers to inventory items. Bundles use multiple r
 3.  Validate timestamp if present → 400 if stale
 4.  Log raw payload to webhook_logs (received_at, raw_payload, action, zenbooker_job_id)
 5.  Parse action type
-6.  If unrecognized action → log result = error, result_detail = "unrecognized action: [value]", return 200
+6.  If unrecognized action → log result = skipped, result_detail = "unrecognized action: [value]", return 200
 7.  Resolve chain: look up assigned staff in chain_mappings → get chain_id
 8.  Resolve items (additive, not blocking):
       For each service/modifier in payload:
@@ -285,11 +285,9 @@ Maps Zenbooker services and modifiers to inventory items. Bundles use multiple r
 | `job_rescheduled` | Full pipeline; upsert updates event_date, times, chain, address |
 | `job_cancelled` | Upsert with status = canceled; no item processing |
 | `service_order_edited` | Full pipeline; re-run mapping resolution on new service list; flip to needs_review if new unmapped service introduced even if original booking was confirmed |
-| `recurring_booking_created` | Log to webhook_logs only; return 200 |
-| `recurring_booking_canceled` | Log to webhook_logs only; return 200 |
-| Unrecognized | Log result = skipped, result_detail = "unrecognized action: [value]", return 200 |
 | `recurring_booking_created` | Log result = skipped, return 200 |
 | `recurring_booking_canceled` | Log result = skipped, return 200 |
+| Unrecognized | Log result = skipped, result_detail = "unrecognized action: [value]", return 200 |
 
 **Note on recurring bookings:** Zenbooker generates individual `job_created` events for each occurrence, which the existing pipeline handles. Recurring-level events are logged for visibility. Confirm this behavior during testing.
 
