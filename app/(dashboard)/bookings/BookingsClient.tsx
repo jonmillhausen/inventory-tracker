@@ -73,6 +73,7 @@ function NeedsReviewPanel({ bookingId, onClose, onCreateMapping }: {
                     <li key={name} className="flex items-center justify-between bg-yellow-50 rounded px-3 py-1.5">
                       <span className="text-sm">{name}</span>
                       <button
+                        // serviceId is unknown (result_detail stores names only); user fills it in the modal
                         onClick={() => onCreateMapping('', name)}
                         className="text-xs text-blue-600 hover:underline"
                       >
@@ -124,6 +125,7 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
 
   const bookings = data?.bookings ?? []
   const bookingItems = data?.bookingItems ?? []
+  const needsReviewCount = bookings.filter(b => b.status === 'needs_review').length
 
   // Build chain lookup
   const chainMap = new Map(chains.map(c => [c.id, c]))
@@ -201,9 +203,9 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
       </div>
 
       {/* Needs review banner */}
-      {bookings.filter(b => b.status === 'needs_review').length > 0 && (
+      {needsReviewCount > 0 && (
         <div className="rounded-md bg-yellow-50 border border-yellow-200 px-4 py-2 text-sm text-yellow-800">
-          ⚠️ {bookings.filter(b => b.status === 'needs_review').length} booking{bookings.filter(b => b.status === 'needs_review').length !== 1 ? 's' : ''} need attention
+          ⚠️ {needsReviewCount} booking{needsReviewCount !== 1 ? 's' : ''} need attention
         </div>
       )}
 
