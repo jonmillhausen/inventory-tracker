@@ -36,7 +36,7 @@ export async function getSessionAndRole(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const role = profile.role as UserRole
+  const { role } = profile
 
   if (!roleAllows(role, allowedRoles)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
