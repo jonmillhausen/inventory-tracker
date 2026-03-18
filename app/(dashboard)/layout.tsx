@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { QueryProvider } from '@/components/providers/QueryProvider'
+import { RealtimeSync } from '@/components/providers/RealtimeSync'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { TopBar } from '@/components/layout/TopBar'
 import type { UserRole } from '@/lib/types/database.types'
@@ -32,6 +33,7 @@ export default async function DashboardLayout({
 
   return (
     <QueryProvider>
+      <RealtimeSync />
       <div className="flex h-screen overflow-hidden">
         <Sidebar role={(profile as { full_name: string; role: string }).role as UserRole} />
         <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
