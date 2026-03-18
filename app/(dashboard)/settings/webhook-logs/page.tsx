@@ -1,3 +1,21 @@
-export default function WebhookLogsPage() {
-  return <p className="text-gray-500">Webhook Logs — coming soon</p>
+// app/(dashboard)/settings/webhook-logs/page.tsx
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { WebhookLogsClient } from './WebhookLogsClient'
+
+export default async function WebhookLogsPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
+  if (!profile || profile.role !== 'admin') return <p className="text-red-600">Access denied</p>
+
+  const { data: logs } = await supabase
+    .from('webhook_logs')
+    .select('*')
+    .order('received_at', { ascending: false })
+    .limit(200)
+
+  return <WebhookLogsClient initialLogs={logs ?? []} />
 }
