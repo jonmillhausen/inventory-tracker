@@ -30,6 +30,13 @@ const STATUS_BADGE: Record<BookingStatus, { label: string; className: string }> 
   completed: { label: 'Completed', className: 'bg-blue-100 text-blue-800' },
 }
 
+const EVENT_TYPE_LABEL: Record<string, string> = {
+  coordinated: 'Coordinated',
+  dropoff: 'Drop-off',
+  pickup: 'Pickup',
+  willcall: 'Will Call',
+}
+
 export function BookingsClient({ initialData, initialChains, role }: Props) {
   const { data } = useBookings(initialData)
   const { data: chains = [] } = useChains(initialChains)
@@ -123,6 +130,13 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
           <Button onClick={() => setShowCreate(true)}>+ Add Booking</Button>
         )}
       </div>
+
+      {/* Needs review banner */}
+      {bookings.filter(b => b.status === 'needs_review').length > 0 && (
+        <div className="rounded-md bg-yellow-50 border border-yellow-200 px-4 py-2 text-sm text-yellow-800">
+          ⚠️ {bookings.filter(b => b.status === 'needs_review').length} booking{bookings.filter(b => b.status === 'needs_review').length !== 1 ? 's' : ''} need attention
+        </div>
+      )}
 
       {/* Filter bar */}
       <div className="flex flex-wrap gap-3 items-center">
@@ -248,7 +262,7 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
                       <span className="text-gray-400 text-xs">Unassigned</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 capitalize">{booking.event_type}</td>
+                  <td className="px-3 py-2">{EVENT_TYPE_LABEL[booking.event_type]}</td>
                   <td className="px-3 py-2">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
                       {badge.label}
