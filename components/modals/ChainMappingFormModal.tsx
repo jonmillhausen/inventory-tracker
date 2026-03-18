@@ -67,7 +67,7 @@ export function ChainMappingFormModal({ mapping, chains, onClose }: Props) {
           </div>
           <div>
             <label htmlFor="chain-select" className="block text-sm font-medium mb-1">Chain</label>
-            <Select value={chainId} onValueChange={setChainId} required>
+            <Select value={chainId} onValueChange={val => setChainId(val ?? '')} required>
               <SelectTrigger id="chain-select"><SelectValue placeholder="Select chain..." /></SelectTrigger>
               <SelectContent>
                 {activeChains.map(c => (

@@ -3,6 +3,10 @@ import { getSessionAndRole } from '@/lib/api/auth'
 import { createClient } from '@/lib/supabase/server'
 import { resolveWebhookItems } from '@/lib/utils/webhookProcessor'
 import type { ZenbookerService } from '@/lib/utils/webhookProcessor'
+import type { Database } from '@/lib/types/database.types'
+
+type ServiceMappingRow = Database['public']['Tables']['service_mappings']['Row']
+type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 
 async function batchReprocess(supabase: Awaited<ReturnType<typeof createClient>>) {
   const { data: bookings } = await supabase
@@ -36,8 +40,8 @@ async function batchReprocess(supabase: Awaited<ReturnType<typeof createClient>>
     const { resolvedItems, unmappedNames } = resolveWebhookItems(
       services,
       assignedStaff,
-      serviceMappings ?? [],
-      chainMappings ?? [],
+      (serviceMappings ?? []) as ServiceMappingRow[],
+      (chainMappings ?? []) as ChainMappingRow[],
     )
 
     if (unmappedNames.length > 0) continue

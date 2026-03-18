@@ -96,7 +96,7 @@ export function ServiceMappingFormModal({ mapping, prefillServiceId, prefillServ
           )}
           <div>
             <label htmlFor="equipment-item" className="block text-sm font-medium mb-1">Equipment Item</label>
-            <Select value={itemId} onValueChange={setItemId} required>
+            <Select value={itemId} onValueChange={val => setItemId(val ?? '')} required>
               <SelectTrigger id="equipment-item"><SelectValue placeholder="Select equipment..." /></SelectTrigger>
               <SelectContent>
                 {activeEquipment.map(e => (

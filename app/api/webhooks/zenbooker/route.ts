@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { resolveWebhookItems } from '@/lib/utils/webhookProcessor'
 import type { ZenbookerPayload } from '@/lib/utils/webhookProcessor'
+import type { Database } from '@/lib/types/database.types'
+
+type ServiceMappingRow = Database['public']['Tables']['service_mappings']['Row']
+type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 
 const PROCESSABLE_ACTIONS = new Set([
   'job_created',
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
       received_at: new Date().toISOString(),
       zenbooker_job_id: payload.job_id,
       action,
-      raw_payload: payload as Record<string, unknown>,
+      raw_payload: payload as unknown as Record<string, unknown>,
     })
     .select('id')
     .single()
@@ -116,8 +120,8 @@ export async function POST(request: Request) {
       const resolution = resolveWebhookItems(
         services,
         assignedStaff,
-        serviceMappings ?? [],
-        chainMappings ?? [],
+        (serviceMappings ?? []) as ServiceMappingRow[],
+        (chainMappings ?? []) as ChainMappingRow[],
       )
       chainId = resolution.chainId
       resolvedItems = resolution.resolvedItems
