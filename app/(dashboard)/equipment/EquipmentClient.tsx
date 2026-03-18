@@ -110,7 +110,14 @@ export function EquipmentClient({ initialEquipment, initialSubItems, role }: Pro
                     </td>
                     <td className="px-4 py-2 text-center">
                       {s.issue_flag > 0 ? (
-                        <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs">{s.issue_flag}</Badge>
+                        <button
+                          onClick={() => canResolveFlag(role) ? setResolveFlagItemId(s.id) : undefined}
+                          className="inline-flex"
+                        >
+                          <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs cursor-pointer">
+                            {s.issue_flag}
+                          </Badge>
+                        </button>
                       ) : '—'}
                     </td>
                     <td className="px-4 py-2">
