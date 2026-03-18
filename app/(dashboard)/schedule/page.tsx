@@ -1,3 +1,38 @@
-export default function SchedulePage() {
-  return <p className="text-gray-500">Schedule — coming soon</p>
+import { createClient } from '@/lib/supabase/server'
+import { redirect } from 'next/navigation'
+import { ScheduleClient } from './ScheduleClient'
+import type { Database } from '@/lib/types/database.types'
+import type { BookingsData } from '@/lib/queries/bookings'
+
+type BookingRow = Database['public']['Tables']['bookings']['Row']
+type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
+type ChainRow = Database['public']['Tables']['chains']['Row']
+
+export default async function SchedulePage() {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const [
+    { data: bookings },
+    { data: bookingItems },
+    { data: chains },
+  ] = await Promise.all([
+    supabase.from('bookings').select('*').order('event_date', { ascending: false }),
+    supabase.from('booking_items').select('*'),
+    supabase.from('chains').select('*').eq('is_active', true).order('name'),
+  ])
+
+  const initialData: BookingsData = {
+    bookings: (bookings ?? []) as BookingRow[],
+    bookingItems: (bookingItems ?? []) as BookingItemRow[],
+  }
+
+  return (
+    <ScheduleClient
+      initialData={initialData}
+      initialChains={(chains ?? []) as ChainRow[]}
+    />
+  )
 }
