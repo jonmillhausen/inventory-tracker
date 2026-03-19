@@ -93,12 +93,24 @@ export function resolveWebhookItems(
   const unmappedNames: string[] = []
   const nameFallbacks: NameFallback[] = []
 
+  console.log('[webhook resolve] services from payload:', JSON.stringify(services, null, 2))
+  console.log('[webhook resolve] service_mappings loaded:', JSON.stringify(
+    serviceMappings.map(m => ({
+      zenbooker_service_id: m.zenbooker_service_id,
+      zenbooker_modifier_id: m.zenbooker_modifier_id,
+      item_id: m.item_id,
+    })),
+    null, 2
+  ))
+
   for (const svc of services) {
     const modId = svc.modifier?.modifier_id ?? null
+    console.log(`[webhook resolve] looking up service_id=${svc.service_id} modId=${modId} (modifier=${JSON.stringify(svc.modifier)}, raw svc=${JSON.stringify(svc)})`)
     const sm = serviceMappings.find(m =>
       m.zenbooker_service_id === svc.service_id &&
       (modId === null ? m.zenbooker_modifier_id === null : m.zenbooker_modifier_id === modId)
     )
+    console.log(`[webhook resolve] match result: ${sm ? `item_id=${sm.item_id}` : 'none'}`)
 
     if (sm) {
       const qty = sm.use_customer_qty ? (svc.qty ?? sm.default_qty) : sm.default_qty
