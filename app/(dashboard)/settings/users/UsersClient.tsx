@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useUsers, useUpdateUserRole } from '@/lib/queries/users'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { InviteUserModal } from '@/components/modals/InviteUserModal'
 import type { Database, UserRole } from '@/lib/types/database.types'
 
 type UserRow = Database['public']['Tables']['users']['Row']
@@ -24,10 +27,14 @@ interface Props {
 export function UsersClient({ initialUsers, currentUserId }: Props) {
   const { data: users = [] } = useUsers(initialUsers)
   const updateRole = useUpdateUserRole()
+  const [showInvite, setShowInvite] = useState(false)
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-semibold">User Management</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold">User Management</h1>
+        <Button onClick={() => setShowInvite(true)}>Add User</Button>
+      </div>
 
       <div className="border rounded-lg overflow-hidden">
         <table className="w-full text-sm">
@@ -81,6 +88,7 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
           </tbody>
         </table>
       </div>
+      {showInvite && <InviteUserModal onClose={() => setShowInvite(false)} />}
     </div>
   )
 }

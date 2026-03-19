@@ -34,3 +34,28 @@ export function useUpdateUserRole() {
     onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
   })
 }
+
+export type InviteUserInput = {
+  email: string
+  full_name: string
+  role: string
+}
+
+export function useInviteUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: InviteUserInput) => {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(input),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? 'Failed to invite user')
+      }
+      return res.json()
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: USERS_KEY }),
+  })
+}
