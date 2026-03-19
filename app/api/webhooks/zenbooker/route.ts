@@ -251,7 +251,7 @@ export async function POST(request: Request) {
           zenbooker_job_id: jobId,
           customer_name: payload.data.customer_name ?? '',
           address: payload.data.address ?? '',
-          event_date: payload.data.date ?? '',
+          event_date: payload.data.date ?? null,
           end_date: payload.data.end_date ?? null,
           start_time: payload.data.time_slot?.start_time ?? null,
           end_time: payload.data.time_slot?.end_time ?? null,

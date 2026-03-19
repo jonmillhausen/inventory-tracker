@@ -45,6 +45,7 @@ const INACTIVE_STATUSES: BookingStatus[] = ['canceled']
 
 export function isBookingActiveOnDate(booking: BookingRow, date: string): boolean {
   if (INACTIVE_STATUSES.includes(booking.status)) return false
+  if (!booking.event_date) return false
   const end = booking.end_date ?? booking.event_date
   return booking.event_date <= date && date <= end
 }

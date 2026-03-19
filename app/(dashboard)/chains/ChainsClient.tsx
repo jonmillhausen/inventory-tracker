@@ -75,6 +75,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
       const activeForChain = bookings.filter(b => b.chain === selectedChain && isBookingActiveOnDate(b, selectedDate))
       const end_date = activeForChain.reduce<string | null>((latest, b) => {
         const effectiveEnd = b.end_date ?? b.event_date
+        if (!effectiveEnd) return latest
         return latest === null || effectiveEnd > latest ? effectiveEnd : latest
       }, null) ?? selectedDate
 

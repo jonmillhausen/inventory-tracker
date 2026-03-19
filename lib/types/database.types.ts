@@ -126,7 +126,7 @@ export interface Database {
           id: string
           zenbooker_job_id: string | null
           customer_name: string
-          event_date: string
+          event_date: string | null
           end_date: string | null
           start_time: string | null
           end_time: string | null
@@ -142,7 +142,7 @@ export interface Database {
         Insert: {
           zenbooker_job_id: string | null
           customer_name: string
-          event_date: string
+          event_date?: string | null
           end_date?: string | null
           start_time?: string | null
           end_time?: string | null
@@ -155,7 +155,7 @@ export interface Database {
         }
         Update: Partial<{
           customer_name: string
-          event_date: string
+          event_date: string | null
           end_date: string | null
           start_time: string | null
           end_time: string | null
