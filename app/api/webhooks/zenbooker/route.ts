@@ -50,9 +50,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  // Debug: log raw payload so we can inspect what Zenbooker is sending
-  console.log('[zenbooker webhook] received payload:', JSON.stringify(payload, null, 2))
-
   // Timestamp check (if present, reject if > 5 minutes old)
   if (payload.timestamp) {
     const ageSec = Math.floor(Date.now() / 1000) - payload.timestamp

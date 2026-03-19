@@ -3,14 +3,21 @@ import type { Database } from '@/lib/types/database.types'
 type ServiceMappingRow = Database['public']['Tables']['service_mappings']['Row']
 type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 
+// Zenbooker v3 service structure:
+// Each service has service_selections[], each selection has selected_options[].
+// Each option maps to a modifier/add-on with its own id and qty.
+export interface ZenbookerSelectedOption {
+  id: string
+  name: string
+  qty?: number
+}
+
 export interface ZenbookerService {
   service_id: string
   service_name: string
-  qty?: number
-  modifier?: {
-    modifier_id: string
-    modifier_name: string
-  }
+  service_selections?: Array<{
+    selected_options?: ZenbookerSelectedOption[]
+  }>
 }
 
 // Zenbooker webhook v3 (2025-09-01) payload shape.
@@ -65,9 +72,35 @@ function normalizeForMatch(name: string): string {
 }
 
 /**
+ * Try a name-based fallback against the equipment table.
+ * Returns a ResolvedItem + NameFallback on match, or pushes to unmappedNames.
+ */
+function tryNameFallback(
+  label: string,
+  equipmentByNormalizedName: Map<string, string>,
+  resolvedItems: ResolvedItem[],
+  nameFallbacks: NameFallback[],
+  unmappedNames: string[],
+) {
+  const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
+  if (equipmentId) {
+    resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
+    nameFallbacks.push({ optionName: label, equipmentId })
+  } else {
+    unmappedNames.push(label)
+  }
+}
+
+/**
  * Pure function — no DB calls.
- * Takes payload fields + current mapping tables + equipment list;
- * returns resolved items, chain, unmapped names, and name-fallback matches.
+ *
+ * Resolution logic per service (v3 structure):
+ *   1. Collect all selected_options across all service_selections.
+ *   2. For each option: look up (service_id, option.id) → modifier-specific mapping.
+ *   3. If no modifier match: fall back to base mapping (service_id, modifier_id IS NULL).
+ *   4. If still no match: try equipment name fallback.
+ *   5. If all fail: unmapped.
+ *   6. If a service has no options at all: attempt the base mapping directly.
  */
 export function resolveWebhookItems(
   services: ZenbookerService[],
@@ -93,44 +126,56 @@ export function resolveWebhookItems(
   const unmappedNames: string[] = []
   const nameFallbacks: NameFallback[] = []
 
-  console.log('[webhook resolve] services from payload:', JSON.stringify(services, null, 2))
-  console.log('[webhook resolve] service_mappings loaded:', JSON.stringify(
-    serviceMappings.map(m => ({
-      zenbooker_service_id: m.zenbooker_service_id,
-      zenbooker_modifier_id: m.zenbooker_modifier_id,
-      item_id: m.item_id,
-    })),
-    null, 2
-  ))
-
   for (const svc of services) {
-    const modId = svc.modifier?.modifier_id ?? null
-    console.log(`[webhook resolve] looking up service_id=${svc.service_id} modId=${modId} (modifier=${JSON.stringify(svc.modifier)}, raw svc=${JSON.stringify(svc)})`)
-    const sm = serviceMappings.find(m =>
-      m.zenbooker_service_id === svc.service_id &&
-      (modId === null ? m.zenbooker_modifier_id === null : m.zenbooker_modifier_id === modId)
-    )
-    console.log(`[webhook resolve] match result: ${sm ? `item_id=${sm.item_id}` : 'none'}`)
+    const allOptions = (svc.service_selections ?? [])
+      .flatMap(sel => sel.selected_options ?? [])
 
-    if (sm) {
-      const qty = sm.use_customer_qty ? (svc.qty ?? sm.default_qty) : sm.default_qty
-      resolvedItems.push({ item_id: sm.item_id, qty, is_sub_item: false, parent_item_id: null })
+    // Base mapping: service_id match with no modifier (modifier_id IS NULL)
+    const baseMapping = serviceMappings.find(
+      m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === null
+    )
+
+    if (allOptions.length === 0) {
+      // No options — use base mapping or name fallback
+      if (baseMapping) {
+        resolvedItems.push({
+          item_id: baseMapping.item_id,
+          qty: baseMapping.default_qty,
+          is_sub_item: false,
+          parent_item_id: null,
+        })
+      } else {
+        tryNameFallback(svc.service_name, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
+      }
       continue
     }
 
-    // No exact mapping — try name fallback
-    const optionName = svc.modifier
-      ? `${svc.service_name} / ${svc.modifier.modifier_name}`
-      : svc.service_name
+    for (const option of allOptions) {
+      // 1. Modifier-specific mapping: (service_id, option.id)
+      const modifierMapping = serviceMappings.find(
+        m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
+      )
 
-    const normalizedOption = normalizeForMatch(optionName)
-    const equipmentId = equipmentByNormalizedName.get(normalizedOption)
+      if (modifierMapping) {
+        const qty = modifierMapping.use_customer_qty
+          ? (option.qty ?? modifierMapping.default_qty)
+          : modifierMapping.default_qty
+        resolvedItems.push({ item_id: modifierMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
+        continue
+      }
 
-    if (equipmentId) {
-      resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
-      nameFallbacks.push({ optionName, equipmentId })
-    } else {
-      unmappedNames.push(optionName)
+      // 2. Base mapping fallback: (service_id, modifier_id IS NULL)
+      if (baseMapping) {
+        const qty = baseMapping.use_customer_qty
+          ? (option.qty ?? baseMapping.default_qty)
+          : baseMapping.default_qty
+        resolvedItems.push({ item_id: baseMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
+        continue
+      }
+
+      // 3. Name fallback against equipment table
+      const label = `${svc.service_name} / ${option.name}`
+      tryNameFallback(label, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
     }
   }
 

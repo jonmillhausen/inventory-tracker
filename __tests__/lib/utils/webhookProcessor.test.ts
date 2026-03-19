@@ -23,65 +23,120 @@ const makeChainMapping = (overrides = {}) => ({
   ...overrides,
 })
 
+// Helper: wrap options into a v3 service_selections shape
+const withOptions = (options: Array<{ id: string; name: string; qty?: number }>) => ({
+  service_selections: [{ selected_options: options }],
+})
+
 describe('resolveWebhookItems', () => {
   it('returns empty resolution for no services and no staff', () => {
     const result = resolveWebhookItems([], [], [], [])
-    expect(result).toEqual({ chainId: null, resolvedItems: [], unmappedNames: [] })
+    expect(result).toEqual({ chainId: null, resolvedItems: [], unmappedNames: [], nameFallbacks: [] })
   })
 
-  it('resolves a standalone service with default_qty', () => {
+  it('resolves a standalone service with no options via base mapping', () => {
     const svc: ZenbookerService = { service_id: 'svc1', service_name: 'Foam Party' }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
     expect(result.resolvedItems).toEqual([{ item_id: 'foam_machine', qty: 1, is_sub_item: false, parent_item_id: null }])
     expect(result.unmappedNames).toHaveLength(0)
   })
 
-  it('uses customer qty when use_customer_qty = true', () => {
-    const svc: ZenbookerService = { service_id: 'svc1', service_name: 'Foam Party', qty: 3 }
-    const sm = makeServiceMapping({ use_customer_qty: true, default_qty: 1 })
+  it('resolves a service option via modifier-specific mapping', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc2',
+      service_name: 'Laser Tag',
+      ...withOptions([{ id: 'mod1', name: 'Elite Laser Tag', qty: 1 }]),
+    }
+    const sm = makeServiceMapping({
+      id: 'sm2',
+      zenbooker_service_id: 'svc2',
+      zenbooker_modifier_id: 'mod1',
+      zenbooker_modifier_name: 'Elite Laser Tag',
+      item_id: 'elite_laser_tag',
+    })
+    const result = resolveWebhookItems([svc], [], [sm], [])
+    expect(result.resolvedItems[0].item_id).toBe('elite_laser_tag')
+    expect(result.unmappedNames).toHaveLength(0)
+  })
+
+  it('uses option qty when use_customer_qty = true', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'mod1', name: 'Option A', qty: 3 }]),
+    }
+    const sm = makeServiceMapping({ zenbooker_modifier_id: 'mod1', use_customer_qty: true, default_qty: 1 })
     const result = resolveWebhookItems([svc], [], [sm], [])
     expect(result.resolvedItems[0].qty).toBe(3)
   })
 
-  it('falls back to default_qty when use_customer_qty = true but qty not in payload', () => {
-    const svc: ZenbookerService = { service_id: 'svc1', service_name: 'Foam Party' }
-    const sm = makeServiceMapping({ use_customer_qty: true, default_qty: 2 })
+  it('falls back to default_qty when use_customer_qty = true but option has no qty', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'mod1', name: 'Option A' }]),
+    }
+    const sm = makeServiceMapping({ zenbooker_modifier_id: 'mod1', use_customer_qty: true, default_qty: 2 })
     const result = resolveWebhookItems([svc], [], [sm], [])
     expect(result.resolvedItems[0].qty).toBe(2)
   })
 
-  it('adds unmapped service name when no mapping found', () => {
+  it('falls back to base mapping when option has no modifier-specific mapping', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'unknown_mod', name: 'Unknown Add-on', qty: 1 }]),
+    }
+    const baseSm = makeServiceMapping() // modifier_id: null
+    const result = resolveWebhookItems([svc], [], [baseSm], [])
+    expect(result.resolvedItems[0].item_id).toBe('foam_machine')
+    expect(result.unmappedNames).toHaveLength(0)
+  })
+
+  it('adds unmapped label when neither modifier nor base mapping found', () => {
+    const svc: ZenbookerService = {
+      service_id: 'unknown',
+      service_name: 'Mystery Service',
+      ...withOptions([{ id: 'opt1', name: 'Option X' }]),
+    }
+    const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
+    expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toEqual(['Mystery Service / Option X'])
+  })
+
+  it('adds unmapped service name when no options and no base mapping found', () => {
     const svc: ZenbookerService = { service_id: 'unknown', service_name: 'Mystery Service' }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
     expect(result.resolvedItems).toHaveLength(0)
     expect(result.unmappedNames).toEqual(['Mystery Service'])
   })
 
-  it('resolves a bundle service with modifier', () => {
+  it('does not match an option against a modifier mapping for a different option id', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Game Bundle',
-      modifier: { modifier_id: 'mod1', modifier_name: 'Laser Tag' },
+      ...withOptions([{ id: 'different_mod', name: 'Other Option' }]),
     }
-    const sm = makeServiceMapping({
-      id: 'sm2',
-      zenbooker_service_id: 'svc2',
-      zenbooker_modifier_id: 'mod1',
-      zenbooker_modifier_name: 'Laser Tag',
-      item_id: 'laser_tag',
-    })
+    const sm = makeServiceMapping({ zenbooker_service_id: 'svc2', zenbooker_modifier_id: 'mod1' })
+    // no base mapping and no modifier match → unmapped
     const result = resolveWebhookItems([svc], [], [sm], [])
-    expect(result.resolvedItems[0].item_id).toBe('laser_tag')
+    expect(result.unmappedNames).toEqual(['Game Bundle / Other Option'])
   })
 
-  it('does not match modifier row for standalone service (modifier_id = null vs non-null)', () => {
-    const svc: ZenbookerService = { service_id: 'svc2', service_name: 'Game Bundle' }
-    const sm = makeServiceMapping({
-      zenbooker_service_id: 'svc2',
-      zenbooker_modifier_id: 'mod1',
-    })
-    const result = resolveWebhookItems([svc], [], [sm], [])
-    expect(result.unmappedNames).toEqual(['Game Bundle'])
+  it('resolves multiple options within a single service independently', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Laser Tag',
+      ...withOptions([
+        { id: 'opt_elite', name: 'Elite', qty: 1 },
+        { id: 'opt_basic', name: 'Basic', qty: 2 },
+      ]),
+    }
+    const smElite = makeServiceMapping({ zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'opt_elite', item_id: 'elite_laser_tag', default_qty: 1 })
+    const smBasic = makeServiceMapping({ id: 'sm2', zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'opt_basic', item_id: 'basic_laser_tag', default_qty: 1 })
+    const result = resolveWebhookItems([svc], [], [smElite, smBasic], [])
+    expect(result.resolvedItems).toHaveLength(2)
+    expect(result.resolvedItems.map(r => r.item_id)).toEqual(['elite_laser_tag', 'basic_laser_tag'])
   })
 
   it('resolves chain from assigned staff', () => {
