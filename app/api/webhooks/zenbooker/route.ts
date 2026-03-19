@@ -12,6 +12,9 @@ const PROCESSABLE_ACTIONS = new Set([
   'job_rescheduled',
   'job_cancelled',
   'service_order_edited',
+  'job_assigned',
+  'job_completed',
+  'job_started',
 ])
 
 const SKIPPABLE_ACTIONS = new Set([
@@ -95,6 +98,95 @@ export async function POST(request: Request) {
       .update({ result: 'skipped', result_detail: `unrecognized action: ${action}` })
       .eq('id', logId)
     return NextResponse.json({ ok: true })
+  }
+
+  // ── job_started: log only, no booking mutation ──────────────────────────
+  if (action === 'job_started') {
+    await supabase
+      .from('webhook_logs')
+      .update({ result: 'success', result_detail: 'job_started: logged' })
+      .eq('id', logId)
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── job_assigned / job_completed: update existing booking ───────────────
+  if (action === 'job_assigned' || action === 'job_completed') {
+    try {
+      // Look up the booking by Zenbooker job ID
+      const { data: existingBooking, error: lookupErr } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('zenbooker_job_id', payload.job_id)
+        .single()
+
+      if (lookupErr || !existingBooking) {
+        await supabase
+          .from('webhook_logs')
+          .update({ result: 'error', result_detail: 'booking not found' })
+          .eq('id', logId)
+        return NextResponse.json({ error: 'Booking not found' }, { status: 404 })
+      }
+
+      const bookingId = existingBooking.id
+
+      if (action === 'job_assigned') {
+        const { data: chainMappingsRaw } = await supabase.from('chain_mappings').select('*')
+        const chainMappings = (chainMappingsRaw ?? []) as ChainMappingRow[]
+        const assignedStaff = payload.assigned_staff ?? []
+        let chainId: string | null = null
+        for (const staff of assignedStaff) {
+          const cm = chainMappings.find(m => m.zenbooker_staff_id === staff.staff_id)
+          if (cm) { chainId = cm.chain_id; break }
+        }
+
+        const { error: updateErr } = await supabase
+          .from('bookings')
+          .update({ chain: chainId })
+          .eq('id', bookingId)
+
+        if (updateErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: updateErr.message })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+        }
+
+        const detail = chainId ? `chain set to ${chainId}` : 'no chain mapping found for assigned staff'
+        await supabase
+          .from('webhook_logs')
+          .update({ result: 'success', result_detail: detail, booking_id: bookingId })
+          .eq('id', logId)
+      }
+
+      if (action === 'job_completed') {
+        const { error: updateErr } = await supabase
+          .from('bookings')
+          .update({ status: 'completed' })
+          .eq('id', bookingId)
+
+        if (updateErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: updateErr.message })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+        }
+
+        await supabase
+          .from('webhook_logs')
+          .update({ result: 'success', result_detail: 'status set to completed', booking_id: bookingId })
+          .eq('id', logId)
+      }
+
+      return NextResponse.json({ ok: true })
+    } catch (err) {
+      await supabase
+        .from('webhook_logs')
+        .update({ result: 'error', result_detail: String(err) })
+        .eq('id', logId)
+      return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+    }
   }
 
   try {
