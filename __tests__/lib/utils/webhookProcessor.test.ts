@@ -24,7 +24,7 @@ const makeChainMapping = (overrides = {}) => ({
 })
 
 // Helper: wrap options into a v3 service_selections shape
-const withOptions = (options: Array<{ id: string; text: string; quantity?: number }>) => ({
+const withOptions = (options: Array<{ id: string; text: string; quantity?: number; price?: number }>) => ({
   service_selections: [{ selected_options: options }],
 })
 
@@ -93,25 +93,15 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toHaveLength(0)
   })
 
-  it('flags as unmapped when no match and option has a price', () => {
-    const svc: ZenbookerService = {
-      service_id: 'unknown',
-      service_name: 'Laser Tag',
-      ...withOptions([{ id: 'opt1', text: 'Elite Package', price: 49 }]),
-    }
-    const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
-    expect(result.resolvedItems).toHaveLength(0)
-    expect(result.unmappedNames).toEqual(['Laser Tag / Elite Package'])
-  })
-
-  it('silently skips unmatched options with no price (metadata options)', () => {
+  it('silently skips unmatched options — price is irrelevant, only mappings matter', () => {
     const svc: ZenbookerService = {
       service_id: 'meta_svc',  // no mapping for this service
       service_name: 'Laser Tag',
       ...withOptions([
         { id: 'dur1', text: '4+ Hours', price: 0 },
-        { id: 'grp1', text: 'Large Group 26+' },
-        { id: 'bkm1', text: 'Get a Custom Quote', price: 0 },
+        { id: 'grp1', text: 'Large Group 26+', price: 75 },
+        { id: 'gen1', text: 'Generator (required if no outlet nearby)', price: 25 },
+        { id: 'bkm1', text: 'Get a Custom Quote' },
       ]),
     }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
@@ -126,16 +116,17 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toEqual(['Mystery Service'])
   })
 
-  it('does not match an option against a modifier mapping for a different option id', () => {
+  it('silently skips an option that does not match any modifier or base mapping', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Game Bundle',
       ...withOptions([{ id: 'different_mod', text: 'Other Option', price: 25 }]),
     }
     const sm = makeServiceMapping({ zenbooker_service_id: 'svc2', zenbooker_modifier_id: 'mod1' })
-    // no base mapping and no modifier match, but price > 0 → unmapped
+    // no base mapping, no modifier match, no equipment name match → silently skipped
     const result = resolveWebhookItems([svc], [], [sm], [])
-    expect(result.unmappedNames).toEqual(['Game Bundle / Other Option'])
+    expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toHaveLength(0)
   })
 
   it('resolves multiple options within a single service independently', () => {

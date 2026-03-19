@@ -152,8 +152,6 @@ export function resolveWebhookItems(
     }
 
     for (const option of allOptions) {
-      console.log(`[webhook option] service=${svc.service_id} raw option:`, JSON.stringify(option))
-
       // 1. Modifier-specific mapping: (service_id, option.id)
       const modifierMapping = serviceMappings.find(
         m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
@@ -176,7 +174,8 @@ export function resolveWebhookItems(
         continue
       }
 
-      // 3. Name fallback against equipment table
+      // 3. Name fallback: exact normalized match against equipment names.
+      //    Uses full label ("Service / Option text") — not a partial/substring match.
       const label = `${svc.service_name} / ${option.text}`
       const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
       if (equipmentId) {
@@ -185,13 +184,9 @@ export function resolveWebhookItems(
         continue
       }
 
-      // 4. No match found — only flag as unmapped if the option has a price
-      //    (price > 0 means it's an equipment selection that needs a mapping).
-      //    Options with no price are metadata (duration, booking method, group size, etc.)
-      //    and should be silently skipped.
-      if ((option.price ?? 0) > 0) {
-        unmappedNames.push(label)
-      }
+      // 4. No match — silently skip. Options like service fees, group size,
+      //    duration, and booking method will never have equipment mappings
+      //    and should not trigger unmapped_service.
     }
   }
 
