@@ -290,7 +290,7 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
                     {booking.end_date && ` – ${booking.end_date}`}
                   </td>
                   <td className="px-3 py-2 tabular-nums whitespace-nowrap">
-                    {formatTime(booking.start_time)} – {formatTime(booking.end_time)}
+                    {booking.start_time ? formatTime(booking.start_time) : '—'} – {booking.end_time ? formatTime(booking.end_time) : '—'}
                   </td>
                   <td className="px-3 py-2">
                     {assigningChainForId === booking.id ? (

@@ -166,12 +166,12 @@ export function ScheduleClient({ initialData, initialChains }: Props) {
                       key={booking.id}
                       className="absolute top-1 bottom-1 rounded text-xs text-white px-1 overflow-hidden flex items-center cursor-default select-none shadow-sm"
                       style={{
-                        left: getLeft(booking.start_time),
-                        width: getWidth(booking.start_time, booking.end_time),
+                        left: getLeft(booking.start_time ?? '00:00'),
+                        width: getWidth(booking.start_time ?? '00:00', booking.end_time ?? '00:00'),
                         backgroundColor: row.color,
                         minWidth: '4px',
                       }}
-                      title={`${booking.customer_name}\n${formatTime12(booking.start_time)}–${formatTime12(booking.end_time)}\n${booking.event_type}\n${booking.address}`}
+                      title={`${booking.customer_name}\n${booking.start_time ? formatTime12(booking.start_time) : '—'}–${booking.end_time ? formatTime12(booking.end_time) : '—'}\n${booking.event_type}\n${booking.address}`}
                     >
                       <span className="truncate">
                         {booking.customer_name}

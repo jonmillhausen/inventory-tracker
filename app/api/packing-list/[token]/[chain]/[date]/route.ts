@@ -88,7 +88,7 @@ export async function GET(
   const { isBookingActiveOnDate } = await import('@/lib/utils/availability')
   const chainBookings = (bookings as BookingRow[])
     .filter(b => b.chain === chain && isBookingActiveOnDate(b, date))
-    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
 
   // Format date for display
   const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -116,7 +116,7 @@ export async function GET(
     .join('\n')
 
   const eventTableRows = chainBookings
-    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${escapeHtml(b.start_time)}–${escapeHtml(b.end_time)}</td><td>${escapeHtml(b.event_type)}</td><td>${escapeHtml(b.address)}</td></tr>`)
+    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${escapeHtml(b.start_time ?? '')}–${escapeHtml(b.end_time ?? '')}</td><td>${escapeHtml(b.event_type)}</td><td>${escapeHtml(b.address)}</td></tr>`)
     .join('\n')
 
   const html = `<!DOCTYPE html>

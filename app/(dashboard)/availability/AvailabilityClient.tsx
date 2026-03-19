@@ -91,7 +91,7 @@ function ChainPopup({
           {bookings.map(b => (
             <div key={b.id} className="text-xs border-b pb-2 last:border-0 last:pb-0">
               <div className="font-medium">{b.customer_name}</div>
-              <div className="text-gray-400">{to12(b.start_time)} – {to12(b.end_time)}</div>
+              <div className="text-gray-400">{b.start_time ? to12(b.start_time) : '—'} – {b.end_time ? to12(b.end_time) : '—'}</div>
               <div className="text-gray-400 truncate">{b.address}</div>
               {b.items.length > 0 && (
                 <ul className="mt-1 space-y-0.5">

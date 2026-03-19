@@ -36,8 +36,8 @@ export type ChainBooking = {
   id: string
   customer_name: string
   address: string
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   items: Array<{ item_id: string; qty: number }>
 }
 
@@ -168,10 +168,10 @@ export function computeChainTimes(
     if (!b.chain || b.chain === 'Unassigned') continue
 
     if (!result[b.chain]) {
-      result[b.chain] = { start: b.start_time, end: b.end_time }
+      result[b.chain] = { start: b.start_time ?? '', end: b.end_time ?? '' }
     } else {
-      if (b.start_time < result[b.chain].start) result[b.chain].start = b.start_time
-      if (b.end_time > result[b.chain].end) result[b.chain].end = b.end_time
+      if (b.start_time && b.start_time < result[b.chain].start) result[b.chain].start = b.start_time
+      if (b.end_time && b.end_time > result[b.chain].end) result[b.chain].end = b.end_time
     }
   }
 
@@ -234,5 +234,5 @@ export function getChainBookings(
       end_time: b.end_time,
       items: bookingItemsByBookingId.get(b.id) ?? [],
     }))
-    .sort((a, b) => a.start_time.localeCompare(b.start_time))
+    .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))
 }

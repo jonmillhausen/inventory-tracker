@@ -25,8 +25,10 @@ export interface ZenbookerPayload {
     address?: string
     date?: string
     end_date?: string
-    start_time?: string
-    end_time?: string
+    time_slot?: {
+      start_time?: string | null
+      end_time?: string | null
+    }
     assigned_staff?: Array<{ staff_id: string; staff_name: string }>
     services?: ZenbookerService[]
   }

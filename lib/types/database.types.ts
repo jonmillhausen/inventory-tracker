@@ -128,8 +128,8 @@ export interface Database {
           customer_name: string
           event_date: string
           end_date: string | null
-          start_time: string
-          end_time: string
+          start_time: string | null
+          end_time: string | null
           chain: string | null
           status: BookingStatus
           event_type: EventType
@@ -144,8 +144,8 @@ export interface Database {
           customer_name: string
           event_date: string
           end_date?: string | null
-          start_time: string
-          end_time: string
+          start_time?: string | null
+          end_time?: string | null
           chain?: string | null
           status: BookingStatus
           event_type: EventType
@@ -157,8 +157,8 @@ export interface Database {
           customer_name: string
           event_date: string
           end_date: string | null
-          start_time: string
-          end_time: string
+          start_time: string | null
+          end_time: string | null
           chain: string | null
           status: BookingStatus
           event_type: EventType
