@@ -51,6 +51,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
+  // Debug: log raw payload so we can inspect what Zenbooker is sending
+  console.log('[zenbooker webhook] received payload:', JSON.stringify(payload, null, 2))
+
   // Step 3a: API version check
   if (payload.api_version && payload.api_version !== SUPPORTED_API_VERSION) {
     return NextResponse.json(
