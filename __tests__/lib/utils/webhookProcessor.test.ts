@@ -93,15 +93,30 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toHaveLength(0)
   })
 
-  it('adds unmapped label when neither modifier nor base mapping found', () => {
+  it('flags as unmapped when no match and option has a price', () => {
     const svc: ZenbookerService = {
       service_id: 'unknown',
-      service_name: 'Mystery Service',
-      ...withOptions([{ id: 'opt1', text: 'Option X' }]),
+      service_name: 'Laser Tag',
+      ...withOptions([{ id: 'opt1', text: 'Elite Package', price: 49 }]),
     }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
     expect(result.resolvedItems).toHaveLength(0)
-    expect(result.unmappedNames).toEqual(['Mystery Service / Option X'])
+    expect(result.unmappedNames).toEqual(['Laser Tag / Elite Package'])
+  })
+
+  it('silently skips unmatched options with no price (metadata options)', () => {
+    const svc: ZenbookerService = {
+      service_id: 'meta_svc',  // no mapping for this service
+      service_name: 'Laser Tag',
+      ...withOptions([
+        { id: 'dur1', text: '4+ Hours', price: 0 },
+        { id: 'grp1', text: 'Large Group 26+' },
+        { id: 'bkm1', text: 'Get a Custom Quote', price: 0 },
+      ]),
+    }
+    const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
+    expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toHaveLength(0)
   })
 
   it('adds unmapped service name when no options and no base mapping found', () => {
@@ -115,10 +130,10 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Game Bundle',
-      ...withOptions([{ id: 'different_mod', text: 'Other Option' }]),
+      ...withOptions([{ id: 'different_mod', text: 'Other Option', price: 25 }]),
     }
     const sm = makeServiceMapping({ zenbooker_service_id: 'svc2', zenbooker_modifier_id: 'mod1' })
-    // no base mapping and no modifier match → unmapped
+    // no base mapping and no modifier match, but price > 0 → unmapped
     const result = resolveWebhookItems([svc], [], [sm], [])
     expect(result.unmappedNames).toEqual(['Game Bundle / Other Option'])
   })

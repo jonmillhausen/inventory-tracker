@@ -8,8 +8,9 @@ type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 // Each option maps to a modifier/add-on with its own id and qty.
 export interface ZenbookerSelectedOption {
   id: string
-  text: string      // display label in v3 (was "name" in earlier assumptions)
-  quantity?: number // qty in v3 (was "qty" in earlier assumptions)
+  text: string      // display label in v3
+  quantity?: number // customer-supplied quantity
+  price?: number    // unit price; options with price > 0 are equipment selections
 }
 
 export interface ZenbookerService {
@@ -177,7 +178,20 @@ export function resolveWebhookItems(
 
       // 3. Name fallback against equipment table
       const label = `${svc.service_name} / ${option.text}`
-      tryNameFallback(label, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
+      const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
+      if (equipmentId) {
+        resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
+        nameFallbacks.push({ optionName: label, equipmentId })
+        continue
+      }
+
+      // 4. No match found — only flag as unmapped if the option has a price
+      //    (price > 0 means it's an equipment selection that needs a mapping).
+      //    Options with no price are metadata (duration, booking method, group size, etc.)
+      //    and should be silently skipped.
+      if ((option.price ?? 0) > 0) {
+        unmappedNames.push(label)
+      }
     }
   }
 
