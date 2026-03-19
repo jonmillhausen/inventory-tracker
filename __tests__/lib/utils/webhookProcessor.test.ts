@@ -24,7 +24,7 @@ const makeChainMapping = (overrides = {}) => ({
 })
 
 // Helper: wrap options into a v3 service_selections shape
-const withOptions = (options: Array<{ id: string; name: string; qty?: number }>) => ({
+const withOptions = (options: Array<{ id: string; text: string; quantity?: number }>) => ({
   service_selections: [{ selected_options: options }],
 })
 
@@ -45,7 +45,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Laser Tag',
-      ...withOptions([{ id: 'mod1', name: 'Elite Laser Tag', qty: 1 }]),
+      ...withOptions([{ id: 'mod1', text: 'Elite Laser Tag', quantity: 1 }]),
     }
     const sm = makeServiceMapping({
       id: 'sm2',
@@ -63,7 +63,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc1',
       service_name: 'Foam Party',
-      ...withOptions([{ id: 'mod1', name: 'Option A', qty: 3 }]),
+      ...withOptions([{ id: 'mod1', text: 'Option A', quantity: 3 }]),
     }
     const sm = makeServiceMapping({ zenbooker_modifier_id: 'mod1', use_customer_qty: true, default_qty: 1 })
     const result = resolveWebhookItems([svc], [], [sm], [])
@@ -74,7 +74,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc1',
       service_name: 'Foam Party',
-      ...withOptions([{ id: 'mod1', name: 'Option A' }]),
+      ...withOptions([{ id: 'mod1', text: 'Option A' }]),
     }
     const sm = makeServiceMapping({ zenbooker_modifier_id: 'mod1', use_customer_qty: true, default_qty: 2 })
     const result = resolveWebhookItems([svc], [], [sm], [])
@@ -85,7 +85,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc1',
       service_name: 'Foam Party',
-      ...withOptions([{ id: 'unknown_mod', name: 'Unknown Add-on', qty: 1 }]),
+      ...withOptions([{ id: 'unknown_mod', text: 'Unknown Add-on', quantity: 1 }]),
     }
     const baseSm = makeServiceMapping() // modifier_id: null
     const result = resolveWebhookItems([svc], [], [baseSm], [])
@@ -97,7 +97,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'unknown',
       service_name: 'Mystery Service',
-      ...withOptions([{ id: 'opt1', name: 'Option X' }]),
+      ...withOptions([{ id: 'opt1', text: 'Option X' }]),
     }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
     expect(result.resolvedItems).toHaveLength(0)
@@ -115,7 +115,7 @@ describe('resolveWebhookItems', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Game Bundle',
-      ...withOptions([{ id: 'different_mod', name: 'Other Option' }]),
+      ...withOptions([{ id: 'different_mod', text: 'Other Option' }]),
     }
     const sm = makeServiceMapping({ zenbooker_service_id: 'svc2', zenbooker_modifier_id: 'mod1' })
     // no base mapping and no modifier match → unmapped
@@ -128,8 +128,8 @@ describe('resolveWebhookItems', () => {
       service_id: 'svc1',
       service_name: 'Laser Tag',
       ...withOptions([
-        { id: 'opt_elite', name: 'Elite', qty: 1 },
-        { id: 'opt_basic', name: 'Basic', qty: 2 },
+        { id: 'opt_elite', text: 'Elite', quantity: 1 },
+        { id: 'opt_basic', text: 'Basic', quantity: 2 },
       ]),
     }
     const smElite = makeServiceMapping({ zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'opt_elite', item_id: 'elite_laser_tag', default_qty: 1 })

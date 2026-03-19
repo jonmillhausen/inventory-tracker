@@ -8,8 +8,8 @@ type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 // Each option maps to a modifier/add-on with its own id and qty.
 export interface ZenbookerSelectedOption {
   id: string
-  name: string
-  qty?: number
+  text: string      // display label in v3 (was "name" in earlier assumptions)
+  quantity?: number // qty in v3 (was "qty" in earlier assumptions)
 }
 
 export interface ZenbookerService {
@@ -151,6 +151,8 @@ export function resolveWebhookItems(
     }
 
     for (const option of allOptions) {
+      console.log(`[webhook option] service=${svc.service_id} raw option:`, JSON.stringify(option))
+
       // 1. Modifier-specific mapping: (service_id, option.id)
       const modifierMapping = serviceMappings.find(
         m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
@@ -158,7 +160,7 @@ export function resolveWebhookItems(
 
       if (modifierMapping) {
         const qty = modifierMapping.use_customer_qty
-          ? (option.qty ?? modifierMapping.default_qty)
+          ? (option.quantity ?? modifierMapping.default_qty)
           : modifierMapping.default_qty
         resolvedItems.push({ item_id: modifierMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
         continue
@@ -167,14 +169,14 @@ export function resolveWebhookItems(
       // 2. Base mapping fallback: (service_id, modifier_id IS NULL)
       if (baseMapping) {
         const qty = baseMapping.use_customer_qty
-          ? (option.qty ?? baseMapping.default_qty)
+          ? (option.quantity ?? baseMapping.default_qty)
           : baseMapping.default_qty
         resolvedItems.push({ item_id: baseMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
         continue
       }
 
       // 3. Name fallback against equipment table
-      const label = `${svc.service_name} / ${option.name}`
+      const label = `${svc.service_name} / ${option.text}`
       tryNameFallback(label, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
     }
   }
