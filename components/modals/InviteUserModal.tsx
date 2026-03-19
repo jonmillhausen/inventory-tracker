@@ -71,7 +71,7 @@ export function InviteUserModal({ onClose }: { onClose: () => void }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-role">Role</Label>
-            <Select value={role} onValueChange={val => setRole(val)}>
+            <Select value={role} onValueChange={val => { if (val) setRole(val) }}>
               <SelectTrigger id="invite-role">
                 <SelectValue />
               </SelectTrigger>
