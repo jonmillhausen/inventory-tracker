@@ -4,11 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 
 const VALID_ROLES = ['admin', 'sales', 'staff', 'readonly'] as const
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await getSessionAndRole(['admin'])
   if (auth instanceof NextResponse) return auth
+  const { id } = await params
 
-  if (params.id === auth.userId)
+  if (id === auth.userId)
     return NextResponse.json({ error: 'Cannot change your own role' }, { status: 400 })
 
   const supabase = await createClient()
@@ -25,7 +26,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   const { data, error } = await supabase
     .from('users')
     .update({ role: role as typeof VALID_ROLES[number] })
-    .eq('id', params.id)
+    .eq('id', id)
     .select()
     .single()
 
