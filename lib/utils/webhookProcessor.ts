@@ -15,6 +15,7 @@ export interface ZenbookerService {
 
 export interface ZenbookerPayload {
   action: string
+  api_version?: string
   timestamp?: number
   job_id: string
   customer_name: string

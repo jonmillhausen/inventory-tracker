@@ -22,9 +22,12 @@ const SKIPPABLE_ACTIONS = new Set([
   'recurring_booking_canceled',
 ])
 
+const SUPPORTED_API_VERSION = '2025-09-01'
+
 export async function POST(request: Request) {
-  // Step 1: Verify shared secret
-  const secret = request.headers.get('x-zenbooker-secret')
+  // Step 1: Verify shared secret from query parameter
+  const { searchParams } = new URL(request.url)
+  const secret = searchParams.get('secret')
   if (!secret || secret !== process.env.ZENBOOKER_WEBHOOK_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -46,6 +49,14 @@ export async function POST(request: Request) {
     payload = JSON.parse(new TextDecoder().decode(bodyBuffer)) as ZenbookerPayload
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  // Step 3a: API version check
+  if (payload.api_version && payload.api_version !== SUPPORTED_API_VERSION) {
+    return NextResponse.json(
+      { error: `Unsupported api_version: ${payload.api_version}` },
+      { status: 400 }
+    )
   }
 
   // Step 3b: Timestamp check (if present, reject if > 5 minutes old)
