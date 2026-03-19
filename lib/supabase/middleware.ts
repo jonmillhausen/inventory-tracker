@@ -21,8 +21,11 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          // Only write to supabaseResponse — do NOT touch request.cookies here
-          // and do NOT recreate supabaseResponse, as that drops prior response headers.
+          // Update request cookies so downstream getAll() sees the refreshed tokens
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          // Recreate supabaseResponse with the updated request so new cookies are forwarded
+          supabaseResponse = NextResponse.next({ request })
+          // Set on response so the browser receives refreshed tokens
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -37,7 +40,12 @@ export async function updateSession(request: NextRequest) {
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
-    return NextResponse.redirect(url)
+    // Copy any refreshed session cookies into the redirect response so tokens aren't lost
+    const redirectResponse = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach(cookie =>
+      redirectResponse.cookies.set(cookie)
+    )
+    return redirectResponse
   }
 
   return supabaseResponse

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,8 +11,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
-
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -28,8 +25,10 @@ export default function LoginPage() {
       return
     }
 
-    router.push('/availability')
-    router.refresh()
+    // Full navigation ensures session cookies are present in the outgoing request.
+    // router.push + router.refresh race in Next.js 16 Turbopack router causes
+    // the refresh to interrupt the navigation and reset the component.
+    window.location.href = '/availability'
   }
 
   return (
