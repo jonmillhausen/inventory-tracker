@@ -35,14 +35,7 @@ export async function updateSession(request: NextRequest) {
   )
 
   // Refresh session — IMPORTANT: do not remove this call
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-
-  // Debug: log proxy auth result to help diagnose session issues
-  if (!isPublicPath(request.nextUrl.pathname)) {
-    const cookieNames = request.cookies.getAll().map(c => c.name)
-    const hasSessionCookie = cookieNames.some(n => n.includes('auth-token'))
-    console.log('[proxy] path:', request.nextUrl.pathname, '| session cookie present:', hasSessionCookie, '| user found:', !!user, '| error:', authError?.message ?? 'none')
-  }
+  const { data: { user } } = await supabase.auth.getUser()
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     const url = request.nextUrl.clone()

@@ -14,22 +14,19 @@ export default async function DashboardLayout({
   const supabase = await createClient()
   const {
     data: { user },
-    error: userError,
   } = await supabase.auth.getUser()
 
   if (!user) {
-    console.log('[layout] getUser failed — error:', userError?.message ?? 'no error, session missing')
     redirect('/login')
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from('users')
     .select('full_name, role')
     .eq('id', user!.id)
     .single()
 
   if (!profile) {
-    console.log('[layout] profile query failed — userId:', user!.id, '| error:', profileError?.message ?? 'no row')
     // User authenticated but no profile row — sign out and redirect
     redirect('/login')
   }
