@@ -7,22 +7,21 @@ import type { Database } from '@/lib/types/database.types'
 type ServiceMappingRow = Database['public']['Tables']['service_mappings']['Row']
 type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 
+// Zenbooker v3 uses dot-notation event names
 const PROCESSABLE_ACTIONS = new Set([
-  'job_created',
-  'job_rescheduled',
-  'job_cancelled',
-  'service_order_edited',
-  'job_assigned',
-  'job_completed',
-  'job_started',
+  'job.created',
+  'job.rescheduled',
+  'job.cancelled',
+  'service_order.edited',
+  'job.assigned',
+  'job.completed',
+  'job.started',
 ])
 
 const SKIPPABLE_ACTIONS = new Set([
-  'recurring_booking_created',
-  'recurring_booking_canceled',
+  'recurring_booking.created',
+  'recurring_booking.canceled',
 ])
-
-const SUPPORTED_API_VERSION = '2025-09-01'
 
 export async function POST(request: Request) {
   // Step 1: Verify shared secret from query parameter
@@ -54,15 +53,7 @@ export async function POST(request: Request) {
   // Debug: log raw payload so we can inspect what Zenbooker is sending
   console.log('[zenbooker webhook] received payload:', JSON.stringify(payload, null, 2))
 
-  // Step 3a: API version check
-  if (payload.api_version && payload.api_version !== SUPPORTED_API_VERSION) {
-    return NextResponse.json(
-      { error: `Unsupported api_version: ${payload.api_version}` },
-      { status: 400 }
-    )
-  }
-
-  // Step 3b: Timestamp check (if present, reject if > 5 minutes old)
+  // Timestamp check (if present, reject if > 5 minutes old)
   if (payload.timestamp) {
     const ageSec = Math.floor(Date.now() / 1000) - payload.timestamp
     if (ageSec > 300 || ageSec < -300) {
@@ -70,20 +61,21 @@ export async function POST(request: Request) {
     }
   }
 
-  // Step 4: Missing job_id check
-  if (!payload.job_id || typeof payload.job_id !== 'string') {
-    return NextResponse.json({ error: 'Missing job_id' }, { status: 400 })
+  // Validate required fields — v3 structure: event at root, job id at data.id
+  if (!payload.data?.id || typeof payload.data.id !== 'string') {
+    return NextResponse.json({ error: 'Missing data.id' }, { status: 400 })
   }
 
+  const jobId = payload.data.id
   const supabase = createServiceRoleClient()
-  const action = payload.action ?? 'unknown'
+  const action = payload.event ?? 'unknown'
 
   // Log raw payload to webhook_logs
   const { data: logRow, error: logErr } = await supabase
     .from('webhook_logs')
     .insert({
       received_at: new Date().toISOString(),
-      zenbooker_job_id: payload.job_id,
+      zenbooker_job_id: jobId,
       action,
       raw_payload: payload as unknown as Record<string, unknown>,
     })
@@ -114,23 +106,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── job_started: log only, no booking mutation ──────────────────────────
-  if (action === 'job_started') {
+  // ── job.started: log only, no booking mutation ───────────────────────────
+  if (action === 'job.started') {
     await supabase
       .from('webhook_logs')
-      .update({ result: 'success', result_detail: 'job_started: logged' })
+      .update({ result: 'success', result_detail: 'job.started: logged' })
       .eq('id', logId)
     return NextResponse.json({ ok: true })
   }
 
-  // ── job_assigned / job_completed: update existing booking ───────────────
-  if (action === 'job_assigned' || action === 'job_completed') {
+  // ── job.assigned / job.completed: update existing booking ────────────────
+  if (action === 'job.assigned' || action === 'job.completed') {
     try {
-      // Look up the booking by Zenbooker job ID
       const { data: existingBooking, error: lookupErr } = await supabase
         .from('bookings')
         .select('id')
-        .eq('zenbooker_job_id', payload.job_id)
+        .eq('zenbooker_job_id', jobId)
         .single()
 
       if (lookupErr || !existingBooking) {
@@ -143,10 +134,10 @@ export async function POST(request: Request) {
 
       const bookingId = existingBooking.id
 
-      if (action === 'job_assigned') {
+      if (action === 'job.assigned') {
         const { data: chainMappingsRaw } = await supabase.from('chain_mappings').select('*')
         const chainMappings = (chainMappingsRaw ?? []) as ChainMappingRow[]
-        const assignedStaff = payload.assigned_staff ?? []
+        const assignedStaff = payload.data.assigned_staff ?? []
         let chainId: string | null = null
         for (const staff of assignedStaff) {
           const cm = chainMappings.find(m => m.zenbooker_staff_id === staff.staff_id)
@@ -173,7 +164,7 @@ export async function POST(request: Request) {
           .eq('id', logId)
       }
 
-      if (action === 'job_completed') {
+      if (action === 'job.completed') {
         const { error: updateErr } = await supabase
           .from('bookings')
           .update({ status: 'completed' })
@@ -211,8 +202,8 @@ export async function POST(request: Request) {
       supabase.from('equipment').select('id, name').eq('is_active', true),
     ])
 
-    const services = payload.services ?? []
-    const assignedStaff = payload.assigned_staff ?? []
+    const services = payload.data.services ?? []
+    const assignedStaff = payload.data.assigned_staff ?? []
 
     // Determine status and resolve items
     let status: 'confirmed' | 'canceled' | 'needs_review'
@@ -221,7 +212,7 @@ export async function POST(request: Request) {
     let unmappedNames: string[] = []
     let resultDetail: string | null = null
 
-    if (action === 'job_cancelled') {
+    if (action === 'job.cancelled') {
       status = 'canceled'
     } else {
       const resolution = resolveWebhookItems(
@@ -257,13 +248,13 @@ export async function POST(request: Request) {
       .from('bookings')
       .upsert(
         {
-          zenbooker_job_id: payload.job_id,
-          customer_name: payload.customer_name,
-          address: payload.address,
-          event_date: payload.date,
-          end_date: payload.end_date ?? null,
-          start_time: payload.start_time,
-          end_time: payload.end_time,
+          zenbooker_job_id: jobId,
+          customer_name: payload.data.customer_name ?? '',
+          address: payload.data.address ?? '',
+          event_date: payload.data.date ?? '',
+          end_date: payload.data.end_date ?? null,
+          start_time: payload.data.start_time ?? '',
+          end_time: payload.data.end_time ?? '',
           chain: chainId,
           status,
           event_type: 'dropoff',
@@ -286,7 +277,7 @@ export async function POST(request: Request) {
     const bookingId = booking.id
 
     // Replace booking_items (skip for cancellations)
-    if (action !== 'job_cancelled') {
+    if (action !== 'job.cancelled') {
       await supabase.from('booking_items').delete().eq('booking_id', bookingId)
       if (resolvedItems.length > 0) {
         await supabase.from('booking_items').insert(

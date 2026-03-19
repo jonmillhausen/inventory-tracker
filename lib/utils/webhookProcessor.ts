@@ -13,19 +13,23 @@ export interface ZenbookerService {
   }
 }
 
+// Zenbooker webhook v3 (2025-09-01) payload shape.
+// Top-level: event name + optional timestamp.
+// All job data is nested under `data`.
 export interface ZenbookerPayload {
-  action: string
-  api_version?: string
+  event: string
   timestamp?: number
-  job_id: string
-  customer_name: string
-  address: string
-  date: string
-  end_date?: string
-  start_time: string
-  end_time: string
-  assigned_staff?: Array<{ staff_id: string; staff_name: string }>
-  services?: ZenbookerService[]
+  data: {
+    id: string
+    customer_name?: string
+    address?: string
+    date?: string
+    end_date?: string
+    start_time?: string
+    end_time?: string
+    assigned_staff?: Array<{ staff_id: string; staff_name: string }>
+    services?: ZenbookerService[]
+  }
 }
 
 export interface ResolvedItem {
