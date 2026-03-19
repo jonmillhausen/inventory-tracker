@@ -21,5 +21,5 @@ export default async function SettingsPage() {
     redirect('/availability')
   }
 
-  redirect('/settings/mappings/service')
+  redirect('/settings/equipment')
 }
