@@ -201,10 +201,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    // Fetch mappings and resolve
-    const [{ data: serviceMappings }, { data: chainMappings }] = await Promise.all([
+    // Fetch mappings and equipment for resolution
+    const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
       supabase.from('service_mappings').select('*'),
       supabase.from('chain_mappings').select('*'),
+      supabase.from('equipment').select('id, name').eq('is_active', true),
     ])
 
     const services = payload.services ?? []
@@ -225,13 +226,26 @@ export async function POST(request: Request) {
         assignedStaff,
         (serviceMappings ?? []) as ServiceMappingRow[],
         (chainMappings ?? []) as ChainMappingRow[],
+        (equipmentRows ?? []) as Array<{ id: string; name: string }>,
       )
       chainId = resolution.chainId
       resolvedItems = resolution.resolvedItems
       unmappedNames = resolution.unmappedNames
-      status = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
+
+      const fallbackDetails = resolution.nameFallbacks.map(
+        f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`
+      )
+
       if (unmappedNames.length > 0) {
-        resultDetail = unmappedNames.join(', ')
+        status = 'needs_review'
+        const parts = [`unmapped: ${unmappedNames.join(', ')}`]
+        if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
+        resultDetail = parts.join('; ')
+      } else if (fallbackDetails.length > 0) {
+        status = 'confirmed'
+        resultDetail = fallbackDetails.join('; ')
+      } else {
+        status = 'confirmed'
       }
     }
 
@@ -282,7 +296,7 @@ export async function POST(request: Request) {
     const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
     await supabase
       .from('webhook_logs')
-      .update({ result: webhookResult, result_detail: resultDetail, booking_id: bookingId })
+      .update({ result: webhookResult, result_detail: resultDetail ?? null, booking_id: bookingId })
       .eq('id', logId)
 
     return NextResponse.json({ ok: true })
