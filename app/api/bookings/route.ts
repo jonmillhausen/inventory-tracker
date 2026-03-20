@@ -47,9 +47,9 @@ export async function POST(request: Request) {
   if (!address || typeof address !== 'string') {
     return NextResponse.json({ error: 'address is required' }, { status: 400 })
   }
-  const VALID_EVENT_TYPES = ['coordinated', 'dropoff', 'pickup', 'willcall']
+  const VALID_EVENT_TYPES = ['coordinated', 'dropoff', 'pickup', 'willcall', 'arena_pickup']
   if (!event_type || typeof event_type !== 'string' || !VALID_EVENT_TYPES.includes(event_type)) {
-    return NextResponse.json({ error: 'event_type must be one of: coordinated, dropoff, pickup, willcall' }, { status: 400 })
+    return NextResponse.json({ error: 'event_type must be one of: coordinated, dropoff, pickup, willcall, arena_pickup' }, { status: 400 })
   }
 
   // Insert booking

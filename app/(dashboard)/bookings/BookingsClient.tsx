@@ -38,6 +38,7 @@ const EVENT_TYPE_LABEL: Record<string, string> = {
   dropoff: 'Drop-off',
   pickup: 'Pickup',
   willcall: 'Will Call',
+  arena_pickup: 'Arena Pickup',
 }
 
 function NeedsReviewPanel({ bookingId, onClose, onCreateMapping }: {
@@ -240,6 +241,7 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
             <SelectItem value="dropoff">Drop-off</SelectItem>
             <SelectItem value="pickup">Pickup</SelectItem>
             <SelectItem value="willcall">Will Call</SelectItem>
+            <SelectItem value="arena_pickup">Arena Pickup</SelectItem>
           </SelectContent>
         </Select>
         {(filterDate || filterStatus !== 'all' || filterEventType !== 'all') && (

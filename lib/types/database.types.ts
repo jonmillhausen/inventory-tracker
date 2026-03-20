@@ -1,6 +1,6 @@
 export type UserRole = 'admin' | 'sales' | 'staff' | 'readonly'
 export type BookingStatus = 'confirmed' | 'canceled' | 'completed' | 'needs_review'
-export type EventType = 'coordinated' | 'dropoff' | 'pickup' | 'willcall'
+export type EventType = 'coordinated' | 'dropoff' | 'pickup' | 'willcall' | 'arena_pickup'
 export type BookingSource = 'webhook' | 'manual'
 export type ItemType = 'equipment' | 'sub_item'
 export type ResolvedAction = 'cleared' | 'moved_to_oos'

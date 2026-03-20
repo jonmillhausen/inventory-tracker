@@ -29,13 +29,14 @@ export interface ZenbookerPayload {
   timestamp?: number
   data: {
     id: string
-    customer_name?: string
-    address?: string
-    date?: string
-    end_date?: string
+    customer?: { name?: string }
+    service_address?: { formatted?: string }
+    start_date?: string           // ISO 8601 datetime, e.g. "2026-12-23T13:00:00.000Z"
+    timezone?: string             // IANA tz, e.g. "America/New_York"
+    estimated_duration_seconds?: number
     time_slot?: {
-      start_time?: string | null
-      end_time?: string | null
+      start_time?: string | null  // "HH:MM" 24-hour
+      end_time?: string | null    // "HH:MM" 24-hour; may be null
     }
     assigned_providers?: Array<{ id: string; name: string }>
     services?: ZenbookerService[]

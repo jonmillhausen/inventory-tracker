@@ -236,6 +236,7 @@ export function BookingFormModal({ booking, onClose }: Props) {
                   <SelectItem value="dropoff">Drop-off</SelectItem>
                   <SelectItem value="pickup">Pickup</SelectItem>
                   <SelectItem value="willcall">Will Call</SelectItem>
+                  <SelectItem value="arena_pickup">Arena Pickup</SelectItem>
                 </SelectContent>
               </Select>
             </div>
