@@ -38,8 +38,10 @@ const DELIVERY_SERVICES = new Set([
  * - All other services → "coordinated".
  */
 function resolveEventType(services: ZenbookerService[], customerName: string): EventType {
-  const hasDeliveryService = services.some(svc => DELIVERY_SERVICES.has(svc.service_name))
-  if (!hasDeliveryService) return 'coordinated'
+  // Coordinated wins: if ANY service is staff-led, the whole booking is coordinated.
+  // Drop-off / pickup / arena_pickup only apply when ALL services are delivery-category.
+  const allDelivery = services.length > 0 && services.every(svc => DELIVERY_SERVICES.has(svc.service_name))
+  if (!allDelivery) return 'coordinated'
 
   // Name-based pickup signals take priority
   if (customerName === 'Wonderfly Games Pickup') return 'pickup'

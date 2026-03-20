@@ -145,6 +145,29 @@ describe('resolveWebhookItems', () => {
     expect(result.resolvedItems.map(r => r.item_id)).toEqual(['elite_laser_tag', 'basic_laser_tag'])
   })
 
+  it('resolves one option to multiple items when multiple modifier rows exist', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Obstacle Course',
+      ...withOptions([{ id: 'mod_full', text: 'Full Obstacle Course', quantity: 1 }]),
+    }
+    const sm1 = makeServiceMapping({ id: 'sm1', zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'mod_full', item_id: 'warped_wall', default_qty: 1 })
+    const sm2 = makeServiceMapping({ id: 'sm2', zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'mod_full', item_id: 'obstacles_only', default_qty: 1 })
+    const result = resolveWebhookItems([svc], [], [sm1, sm2], [])
+    expect(result.resolvedItems).toHaveLength(2)
+    expect(result.resolvedItems.map(r => r.item_id)).toEqual(['warped_wall', 'obstacles_only'])
+  })
+
+  it('resolves no-options service to multiple items when multiple base mappings exist', () => {
+    const svc: ZenbookerService = { service_id: 'svc1', service_name: 'Bundle' }
+    const sm1 = makeServiceMapping({ id: 'sm1', zenbooker_modifier_id: null, item_id: 'item_a', default_qty: 1 })
+    const sm2 = makeServiceMapping({ id: 'sm2', zenbooker_modifier_id: null, item_id: 'item_b', default_qty: 2 })
+    const result = resolveWebhookItems([svc], [], [sm1, sm2], [])
+    expect(result.resolvedItems).toHaveLength(2)
+    expect(result.resolvedItems.map(r => r.item_id)).toEqual(['item_a', 'item_b'])
+    expect(result.resolvedItems[1].qty).toBe(2)
+  })
+
   it('resolves chain from assigned staff', () => {
     const result = resolveWebhookItems(
       [],

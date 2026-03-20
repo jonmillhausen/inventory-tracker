@@ -132,20 +132,23 @@ export function resolveWebhookItems(
     const allOptions = (svc.service_selections ?? [])
       .flatMap(sel => sel.selected_options ?? [])
 
-    // Base mapping: service_id match with no modifier (modifier_id IS NULL)
-    const baseMapping = serviceMappings.find(
+    // All base mappings: service_id match with no modifier (modifier_id IS NULL).
+    // Multiple rows are allowed (e.g. a service that maps to 2 pieces of equipment).
+    const baseMappings = serviceMappings.filter(
       m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === null
     )
 
     if (allOptions.length === 0) {
-      // No options — use base mapping or name fallback
-      if (baseMapping) {
-        resolvedItems.push({
-          item_id: baseMapping.item_id,
-          qty: baseMapping.default_qty,
-          is_sub_item: false,
-          parent_item_id: null,
-        })
+      // No options — push ALL base mapped items, or fall back to name match
+      if (baseMappings.length > 0) {
+        for (const bm of baseMappings) {
+          resolvedItems.push({
+            item_id: bm.item_id,
+            qty: bm.default_qty,
+            is_sub_item: false,
+            parent_item_id: null,
+          })
+        }
       } else {
         tryNameFallback(svc.service_name, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
       }
@@ -153,25 +156,29 @@ export function resolveWebhookItems(
     }
 
     for (const option of allOptions) {
-      // 1. Modifier-specific mapping: (service_id, option.id)
-      const modifierMapping = serviceMappings.find(
+      // 1. Modifier-specific mappings: ALL rows for (service_id, option.id).
+      //    Multiple rows are allowed — e.g. one option can map to two equipment items.
+      const modifierMappings = serviceMappings.filter(
         m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
       )
 
-      if (modifierMapping) {
-        const qty = modifierMapping.use_customer_qty
-          ? (option.quantity ?? modifierMapping.default_qty)
-          : modifierMapping.default_qty
-        resolvedItems.push({ item_id: modifierMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
+      if (modifierMappings.length > 0) {
+        for (const mm of modifierMappings) {
+          const qty = mm.use_customer_qty
+            ? (option.quantity ?? mm.default_qty)
+            : mm.default_qty
+          resolvedItems.push({ item_id: mm.item_id, qty, is_sub_item: false, parent_item_id: null })
+        }
         continue
       }
 
-      // 2. Base mapping fallback: (service_id, modifier_id IS NULL)
-      if (baseMapping) {
-        const qty = baseMapping.use_customer_qty
-          ? (option.quantity ?? baseMapping.default_qty)
-          : baseMapping.default_qty
-        resolvedItems.push({ item_id: baseMapping.item_id, qty, is_sub_item: false, parent_item_id: null })
+      // 2. Base mapping fallback: use first base mapping for this option
+      if (baseMappings.length > 0) {
+        const bm = baseMappings[0]
+        const qty = bm.use_customer_qty
+          ? (option.quantity ?? bm.default_qty)
+          : bm.default_qty
+        resolvedItems.push({ item_id: bm.item_id, qty, is_sub_item: false, parent_item_id: null })
         continue
       }
 
