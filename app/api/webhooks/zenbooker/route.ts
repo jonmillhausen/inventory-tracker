@@ -11,8 +11,8 @@ type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 const PROCESSABLE_ACTIONS = new Set([
   'job.created',
   'job.rescheduled',
-  'job.cancelled',
-  'service_order.edited',
+  'job.canceled',
+  'job.service_order.edited',
   'job.assigned',
   'job.completed',
   'job.started',
@@ -112,8 +112,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // ── job.assigned / job.completed: update existing booking ────────────────
-  if (action === 'job.assigned' || action === 'job.completed') {
+  // Helper: map v3 assigned_providers to resolveWebhookItems format
+  const assignedStaff = (payload.data.assigned_providers ?? []).map(p => ({
+    staff_id: p.id,
+    staff_name: p.name,
+  }))
+
+  // ── Actions that update an existing booking ──────────────────────────────
+  const UPDATE_ACTIONS = new Set(['job.assigned', 'job.completed', 'job.canceled', 'job.rescheduled', 'job.service_order.edited'])
+
+  if (UPDATE_ACTIONS.has(action)) {
     try {
       const { data: existingBooking, error: lookupErr } = await supabase
         .from('bookings')
@@ -134,7 +142,6 @@ export async function POST(request: Request) {
       if (action === 'job.assigned') {
         const { data: chainMappingsRaw } = await supabase.from('chain_mappings').select('*')
         const chainMappings = (chainMappingsRaw ?? []) as ChainMappingRow[]
-        const assignedStaff = payload.data.assigned_staff ?? []
         let chainId: string | null = null
         for (const staff of assignedStaff) {
           const cm = chainMappings.find(m => m.zenbooker_staff_id === staff.staff_id)
@@ -154,7 +161,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Update failed' }, { status: 500 })
         }
 
-        const detail = chainId ? `chain set to ${chainId}` : 'no chain mapping found for assigned staff'
+        const detail = chainId ? `chain set to ${chainId}` : 'no chain mapping found for assigned provider'
         await supabase
           .from('webhook_logs')
           .update({ result: 'success', result_detail: detail, booking_id: bookingId })
@@ -181,6 +188,109 @@ export async function POST(request: Request) {
           .eq('id', logId)
       }
 
+      if (action === 'job.canceled') {
+        const { error: updateErr } = await supabase
+          .from('bookings')
+          .update({ status: 'canceled' })
+          .eq('id', bookingId)
+
+        if (updateErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: updateErr.message })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+        }
+
+        await supabase
+          .from('webhook_logs')
+          .update({ result: 'success', result_detail: 'status set to canceled', booking_id: bookingId })
+          .eq('id', logId)
+      }
+
+      if (action === 'job.rescheduled') {
+        const { error: updateErr } = await supabase
+          .from('bookings')
+          .update({
+            event_date: payload.data.date ?? null,
+            end_date: payload.data.end_date ?? null,
+            start_time: payload.data.time_slot?.start_time ?? null,
+            end_time: payload.data.time_slot?.end_time ?? null,
+            address: payload.data.address ?? '',
+          })
+          .eq('id', bookingId)
+
+        if (updateErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: updateErr.message })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+        }
+
+        await supabase
+          .from('webhook_logs')
+          .update({ result: 'success', result_detail: 'booking rescheduled', booking_id: bookingId })
+          .eq('id', logId)
+      }
+
+      if (action === 'job.service_order.edited') {
+        const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
+          supabase.from('service_mappings').select('*'),
+          supabase.from('chain_mappings').select('*'),
+          supabase.from('equipment').select('id, name').eq('is_active', true),
+        ])
+
+        const services = payload.data.services ?? []
+        const resolution = resolveWebhookItems(
+          services,
+          assignedStaff,
+          (serviceMappings ?? []) as ServiceMappingRow[],
+          (chainMappings ?? []) as ChainMappingRow[],
+          (equipmentRows ?? []) as Array<{ id: string; name: string }>,
+        )
+
+        const { unmappedNames, resolvedItems, nameFallbacks } = resolution
+        const fallbackDetails = nameFallbacks.map(f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`)
+
+        const newStatus: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
+        let resultDetail: string | null = null
+        if (unmappedNames.length > 0) {
+          const parts = [`unmapped: ${unmappedNames.join(', ')}`]
+          if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
+          resultDetail = parts.join('; ')
+        } else if (fallbackDetails.length > 0) {
+          resultDetail = fallbackDetails.join('; ')
+        }
+
+        const { error: updateErr } = await supabase
+          .from('bookings')
+          .update({ status: newStatus })
+          .eq('id', bookingId)
+
+        if (updateErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: updateErr.message })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Update failed' }, { status: 500 })
+        }
+
+        // Replace booking_items
+        await supabase.from('booking_items').delete().eq('booking_id', bookingId)
+        if (resolvedItems.length > 0) {
+          await supabase.from('booking_items').insert(
+            resolvedItems.map(item => ({ ...item, booking_id: bookingId }))
+          )
+        }
+
+        const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
+        await supabase
+          .from('webhook_logs')
+          .update({ result: webhookResult, result_detail: resultDetail, booking_id: bookingId })
+          .eq('id', logId)
+      }
+
       return NextResponse.json({ ok: true })
     } catch (err) {
       await supabase
@@ -191,8 +301,8 @@ export async function POST(request: Request) {
     }
   }
 
+  // ── job.created: full upsert ─────────────────────────────────────────────
   try {
-    // Fetch mappings and equipment for resolution
     const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
       supabase.from('service_mappings').select('*'),
       supabase.from('chain_mappings').select('*'),
@@ -200,44 +310,25 @@ export async function POST(request: Request) {
     ])
 
     const services = payload.data.services ?? []
-    const assignedStaff = payload.data.assigned_staff ?? []
 
-    // Determine status and resolve items
-    let status: 'confirmed' | 'canceled' | 'needs_review'
-    let chainId: string | null = null
-    let resolvedItems: Array<{ item_id: string; qty: number; is_sub_item: boolean; parent_item_id: string | null }> = []
-    let unmappedNames: string[] = []
+    const resolution = resolveWebhookItems(
+      services,
+      assignedStaff,
+      (serviceMappings ?? []) as ServiceMappingRow[],
+      (chainMappings ?? []) as ChainMappingRow[],
+      (equipmentRows ?? []) as Array<{ id: string; name: string }>,
+    )
+    const { chainId, resolvedItems, unmappedNames, nameFallbacks } = resolution
+    const fallbackDetails = nameFallbacks.map(f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`)
+
+    const status: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
     let resultDetail: string | null = null
-
-    if (action === 'job.cancelled') {
-      status = 'canceled'
-    } else {
-      const resolution = resolveWebhookItems(
-        services,
-        assignedStaff,
-        (serviceMappings ?? []) as ServiceMappingRow[],
-        (chainMappings ?? []) as ChainMappingRow[],
-        (equipmentRows ?? []) as Array<{ id: string; name: string }>,
-      )
-      chainId = resolution.chainId
-      resolvedItems = resolution.resolvedItems
-      unmappedNames = resolution.unmappedNames
-
-      const fallbackDetails = resolution.nameFallbacks.map(
-        f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`
-      )
-
-      if (unmappedNames.length > 0) {
-        status = 'needs_review'
-        const parts = [`unmapped: ${unmappedNames.join(', ')}`]
-        if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
-        resultDetail = parts.join('; ')
-      } else if (fallbackDetails.length > 0) {
-        status = 'confirmed'
-        resultDetail = fallbackDetails.join('; ')
-      } else {
-        status = 'confirmed'
-      }
+    if (unmappedNames.length > 0) {
+      const parts = [`unmapped: ${unmappedNames.join(', ')}`]
+      if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
+      resultDetail = parts.join('; ')
+    } else if (fallbackDetails.length > 0) {
+      resultDetail = fallbackDetails.join('; ')
     }
 
     // Upsert booking
@@ -273,17 +364,14 @@ export async function POST(request: Request) {
 
     const bookingId = booking.id
 
-    // Replace booking_items (skip for cancellations)
-    if (action !== 'job.cancelled') {
-      await supabase.from('booking_items').delete().eq('booking_id', bookingId)
-      if (resolvedItems.length > 0) {
-        await supabase.from('booking_items').insert(
-          resolvedItems.map(item => ({ ...item, booking_id: bookingId }))
-        )
-      }
+    // Replace booking_items
+    await supabase.from('booking_items').delete().eq('booking_id', bookingId)
+    if (resolvedItems.length > 0) {
+      await supabase.from('booking_items').insert(
+        resolvedItems.map(item => ({ ...item, booking_id: bookingId }))
+      )
     }
 
-    // Update webhook log with result
     const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
     await supabase
       .from('webhook_logs')

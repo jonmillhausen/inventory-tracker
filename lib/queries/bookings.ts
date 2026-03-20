@@ -49,8 +49,8 @@ export interface CreateBookingInput {
   customer_name: string
   event_date: string
   end_date?: string | null
-  start_time: string
-  end_time: string
+  start_time: string | null
+  end_time: string | null
   address: string
   event_type: EventType
   chain?: string | null
@@ -63,8 +63,8 @@ export interface UpdateBookingInput {
   customer_name?: string
   event_date?: string
   end_date?: string | null
-  start_time?: string
-  end_time?: string
+  start_time?: string | null
+  end_time?: string | null
   address?: string
   event_type?: EventType
   chain?: string | null
