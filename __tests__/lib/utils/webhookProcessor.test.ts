@@ -10,6 +10,7 @@ const makeServiceMapping = (overrides = {}) => ({
   item_id: 'foam_machine',
   default_qty: 1,
   use_customer_qty: false,
+  is_skip: false,
   notes: '',
   ...overrides,
 })
@@ -186,5 +187,56 @@ describe('resolveWebhookItems', () => {
       [makeChainMapping()]
     )
     expect(result.chainId).toBeNull()
+  })
+
+  it('base mapping fires at most once even when multiple options go unmatched', () => {
+    // Dartboard scenario: duration + logistics options all miss modifier mappings,
+    // but the base mapping (dart_board) should appear exactly once.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([
+        { id: 'dur1', text: '4 Hours' },
+        { id: 'dur2', text: '6 Hours' },
+        { id: 'snd1', text: 'Sound System', price: 25 },
+      ]),
+    }
+    const baseSm = makeServiceMapping() // modifier_id: null → foam_machine
+    const result = resolveWebhookItems([svc], [], [baseSm], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].item_id).toBe('foam_machine')
+  })
+
+  it('is_skip modifier row silently consumes the option with no item or fallback', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'foam_pit', text: 'Inflatable Foam Pit', price: 50 }]),
+    }
+    const baseSm = makeServiceMapping()
+    const skipSm = makeServiceMapping({ id: 'sm2', zenbooker_modifier_id: 'foam_pit', item_id: null, is_skip: true, default_qty: 0 })
+    const result = resolveWebhookItems([svc], [], [baseSm, skipSm], [])
+    // The foam_pit option is consumed by the skip row; base mapping does NOT fire
+    expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toHaveLength(0)
+  })
+
+  it('modifier match + skip in same service: items from modifier, skip consumes its option', () => {
+    // Dartboard with a paid add-on (cornhole → item) and a skip (generator → nothing)
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Dartboard',
+      ...withOptions([
+        { id: 'cornhole', text: 'Cornhole', price: 0 },
+        { id: 'generator', text: 'Generator', price: 25 },
+      ]),
+    }
+    const smCornhole = makeServiceMapping({ id: 'sm1', zenbooker_modifier_id: 'cornhole', item_id: 'cornhole', default_qty: 1 })
+    const smBase = makeServiceMapping({ id: 'sm_base', zenbooker_modifier_id: null, item_id: 'dart_board', default_qty: 1 })
+    const smSkip = makeServiceMapping({ id: 'sm_skip', zenbooker_modifier_id: 'generator', item_id: null, is_skip: true, default_qty: 0 })
+    const result = resolveWebhookItems([svc], [], [smCornhole, smBase, smSkip], [])
+    // cornhole matches modifier → pushed; generator matches skip → consumed; base fires for neither
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].item_id).toBe('cornhole')
   })
 })

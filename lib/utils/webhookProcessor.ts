@@ -52,6 +52,7 @@ export interface ResolvedItem {
 
 export interface NameFallback {
   optionName: string
+  optionId?: string   // present when fallback triggered by a service option (not a service name)
   equipmentId: string
 }
 
@@ -79,6 +80,7 @@ function normalizeForMatch(name: string): string {
  */
 function tryNameFallback(
   label: string,
+  optionId: string | undefined,
   equipmentByNormalizedName: Map<string, string>,
   resolvedItems: ResolvedItem[],
   nameFallbacks: NameFallback[],
@@ -87,7 +89,7 @@ function tryNameFallback(
   const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
   if (equipmentId) {
     resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
-    nameFallbacks.push({ optionName: label, equipmentId })
+    nameFallbacks.push({ optionName: label, optionId, equipmentId })
   } else {
     unmappedNames.push(label)
   }
@@ -98,11 +100,13 @@ function tryNameFallback(
  *
  * Resolution logic per service (v3 structure):
  *   1. Collect all selected_options across all service_selections.
- *   2. For each option: look up (service_id, option.id) → modifier-specific mapping.
- *   3. If no modifier match: fall back to base mapping (service_id, modifier_id IS NULL).
- *   4. If still no match: try equipment name fallback.
- *   5. If all fail: unmapped.
- *   6. If a service has no options at all: attempt the base mapping directly.
+ *   2. For each option: look up (service_id, option.id) → modifier-specific mapping(s).
+ *      - is_skip rows cause the option to be silently consumed (no item, no fallback).
+ *   3. If no modifier match: try name fallback (per option).
+ *   4. If still no match: silently skip (non-equipment options like duration, group size).
+ *   5. After all options: if no modifier match was found for the option AND a base
+ *      mapping exists — push base items ONCE per service (deduped across all options).
+ *   6. If a service has no options at all: attempt base mapping, or fall back to name match.
  */
 export function resolveWebhookItems(
   services: ZenbookerService[],
@@ -142,6 +146,7 @@ export function resolveWebhookItems(
       // No options — push ALL base mapped items, or fall back to name match
       if (baseMappings.length > 0) {
         for (const bm of baseMappings) {
+          if (bm.is_skip || !bm.item_id) continue
           resolvedItems.push({
             item_id: bm.item_id,
             qty: bm.default_qty,
@@ -150,35 +155,44 @@ export function resolveWebhookItems(
           })
         }
       } else {
-        tryNameFallback(svc.service_name, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
+        tryNameFallback(svc.service_name, undefined, equipmentByNormalizedName, resolvedItems, nameFallbacks, unmappedNames)
       }
       continue
     }
 
+    // Track whether the base mapping has been pushed for this service.
+    // It fires AT MOST ONCE — not once per unmatched option.
+    let baseMappingPushed = false
+
     for (const option of allOptions) {
       // 1. Modifier-specific mappings: ALL rows for (service_id, option.id).
       //    Multiple rows are allowed — e.g. one option can map to two equipment items.
+      //    is_skip rows consume the option silently (no item, no fallback).
       const modifierMappings = serviceMappings.filter(
         m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
       )
 
       if (modifierMappings.length > 0) {
         for (const mm of modifierMappings) {
+          if (mm.is_skip) continue
+          if (!mm.item_id) continue
           const qty = mm.use_customer_qty
             ? (option.quantity ?? mm.default_qty)
             : mm.default_qty
           resolvedItems.push({ item_id: mm.item_id, qty, is_sub_item: false, parent_item_id: null })
         }
-        continue
+        continue  // option handled by modifier rows (even if all were is_skip)
       }
 
-      // 2. Base mapping fallback: use first base mapping for this option
-      if (baseMappings.length > 0) {
-        const bm = baseMappings[0]
-        const qty = bm.use_customer_qty
-          ? (option.quantity ?? bm.default_qty)
-          : bm.default_qty
-        resolvedItems.push({ item_id: bm.item_id, qty, is_sub_item: false, parent_item_id: null })
+      // 2. Base mapping fallback: push ALL base rows, but only ONCE per service.
+      //    Multiple unmatched options (duration, group size, logistics) must not
+      //    each trigger a separate base insert.
+      if (!baseMappingPushed && baseMappings.length > 0) {
+        for (const bm of baseMappings) {
+          if (bm.is_skip || !bm.item_id) continue
+          resolvedItems.push({ item_id: bm.item_id, qty: bm.default_qty, is_sub_item: false, parent_item_id: null })
+        }
+        baseMappingPushed = true
         continue
       }
 
@@ -188,7 +202,7 @@ export function resolveWebhookItems(
       const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
       if (equipmentId) {
         resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
-        nameFallbacks.push({ optionName: label, equipmentId })
+        nameFallbacks.push({ optionName: label, optionId: option.id, equipmentId })
         continue
       }
 

@@ -230,9 +230,10 @@ export interface Database {
           zenbooker_service_name: string
           zenbooker_modifier_id: string | null
           zenbooker_modifier_name: string | null
-          item_id: string
+          item_id: string | null
           default_qty: number
           use_customer_qty: boolean
+          is_skip: boolean
           notes: string
         }
         Insert: {
@@ -240,17 +241,19 @@ export interface Database {
           zenbooker_service_name: string
           zenbooker_modifier_id?: string | null
           zenbooker_modifier_name?: string | null
-          item_id: string
+          item_id?: string | null
           default_qty: number
           use_customer_qty: boolean
+          is_skip?: boolean
           notes: string
         }
         Update: Partial<{
           zenbooker_service_name: string
           zenbooker_modifier_name: string | null
-          item_id: string
+          item_id: string | null
           default_qty: number
           use_customer_qty: boolean
+          is_skip: boolean
           notes: string
         }>
         Relationships: []
