@@ -330,7 +330,7 @@ export async function POST(request: Request) {
         )
 
         const { unmappedNames, resolvedItems, nameFallbacks } = resolution
-        const fallbackDetails = nameFallbacks.map(f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`)
+        const fallbackDetails = nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`)
 
         const newStatus: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
         const eventType = resolveEventType(services, customerName)
@@ -401,7 +401,7 @@ export async function POST(request: Request) {
       (equipmentRows ?? []) as Array<{ id: string; name: string }>,
     )
     const { chainId, resolvedItems, unmappedNames, nameFallbacks } = resolution
-    const fallbackDetails = nameFallbacks.map(f => `matched by name fallback: ${f.optionName} → ${f.equipmentId}`)
+    const fallbackDetails = nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`)
 
     const status: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
     let resultDetail: string | null = null
