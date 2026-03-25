@@ -7,6 +7,7 @@ import type { BookingsData } from '@/lib/queries/bookings'
 type ChainRow = Database['public']['Tables']['chains']['Row']
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 
@@ -22,12 +23,14 @@ export default async function ChainsPage() {
     { data: bookingItems },
     { data: equipment },
     { data: subItems },
+    { data: subItemLinks },
   ] = await Promise.all([
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
     supabase.from('bookings').select('*'),
     supabase.from('booking_items').select('*'),
     supabase.from('equipment').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_items').select('*').eq('is_active', true).order('name'),
+    supabase.from('equipment_sub_item_links').select('*'),
   ])
 
   const initialData: BookingsData = {
@@ -41,6 +44,7 @@ export default async function ChainsPage() {
       initialData={initialData}
       initialEquipment={(equipment ?? []) as EquipmentRow[]}
       initialSubItems={(subItems ?? []) as SubItemRow[]}
+      initialSubItemLinks={(subItemLinks ?? []) as SubItemLinkRow[]}
     />
   )
 }

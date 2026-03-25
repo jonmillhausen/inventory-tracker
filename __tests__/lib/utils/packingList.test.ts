@@ -5,6 +5,7 @@ type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 
 const BASE_BOOKING: BookingRow = {
   id: 'b1',
@@ -49,7 +50,7 @@ const BASE_SUB_ITEM: SubItemRow = {
 
 describe('calculatePackingList', () => {
   test('empty bookings returns empty result', () => {
-    const result = calculatePackingList([], [], [BASE_EQUIPMENT], [BASE_SUB_ITEM], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([], [], [BASE_EQUIPMENT], [BASE_SUB_ITEM], [], 'chain_1', '2026-04-01')
     expect(result).toEqual([])
   })
 
@@ -58,7 +59,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(1)
     expect(result[0]).toMatchObject({ itemId: 'eq1', name: 'Bounce House', qty: 3, isSubItem: false, parentItemId: null })
   })
@@ -70,7 +71,7 @@ describe('calculatePackingList', () => {
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
       { id: 'bi2', booking_id: 'b2', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(5)
   })
 
@@ -81,7 +82,7 @@ describe('calculatePackingList', () => {
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
       { id: 'bi2', booking_id: 'b2', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(3)
   })
 
@@ -92,7 +93,7 @@ describe('calculatePackingList', () => {
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
       { id: 'bi2', booking_id: 'b2', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(4)
   })
 
@@ -103,7 +104,7 @@ describe('calculatePackingList', () => {
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 1, is_sub_item: false, parent_item_id: null },
       { id: 'bi2', booking_id: 'b2', item_id: 'eq1', qty: 4, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(4)
   })
 
@@ -119,7 +120,7 @@ describe('calculatePackingList', () => {
       { id: 'bi4', booking_id: 'b4', item_id: 'eq1', qty: 4, is_sub_item: false, parent_item_id: null },
     ]
     // dropSum = 2+3=5, coordMax = max(1,4)=4, total = 9
-    const result = calculatePackingList([drop1, drop2, coord1, coord2], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([drop1, drop2, coord1, coord2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(9)
   })
 
@@ -128,7 +129,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
 
@@ -137,7 +138,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
 
@@ -146,7 +147,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
 
@@ -155,7 +156,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result[0].qty).toBe(2)
   })
 
@@ -166,19 +167,53 @@ describe('calculatePackingList', () => {
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 1, is_sub_item: false, parent_item_id: null },
       { id: 'bi2', booking_id: 'b1', item_id: 'eq2', qty: 1, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT, eq2], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT, eq2], [], [], 'chain_1', '2026-04-01')
     expect(result[0].name).toBe('Archery Set')
     expect(result[1].name).toBe('Bounce House')
   })
 
-  test('sub-items included with parentItemId set', () => {
-    const booking: BookingRow = { ...BASE_BOOKING }
+  test('sub-items derived from links with loadout_qty=1', () => {
+    const booking: BookingRow = { ...BASE_BOOKING, event_type: 'dropoff' }
     const items: BookingItemRow[] = [
-      { id: 'bi1', booking_id: 'b1', item_id: 'sub1', qty: 2, is_sub_item: true, parent_item_id: 'eq1' },
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [BASE_SUB_ITEM], 'chain_1', '2026-04-01')
-    expect(result).toHaveLength(1)
-    expect(result[0]).toMatchObject({ itemId: 'sub1', name: 'Blower', qty: 2, isSubItem: true, parentItemId: 'eq1' })
+    const links: SubItemLinkRow[] = [
+      { id: 'lnk1', sub_item_id: 'sub1', parent_id: 'eq1', loadout_qty: 1 },
+    ]
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [BASE_SUB_ITEM], links, 'chain_1', '2026-04-01')
+    const sub = result.find(r => r.itemId === 'sub1')
+    expect(sub).toMatchObject({ itemId: 'sub1', name: 'Blower', qty: 2, isSubItem: true, parentItemId: 'eq1' })
+  })
+
+  test('sub-item loadout_qty multiplies parent quantity', () => {
+    const booking: BookingRow = { ...BASE_BOOKING, event_type: 'dropoff' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 3, is_sub_item: false, parent_item_id: null },
+    ]
+    const links: SubItemLinkRow[] = [
+      { id: 'lnk1', sub_item_id: 'sub1', parent_id: 'eq1', loadout_qty: 2 },
+    ]
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [BASE_SUB_ITEM], links, 'chain_1', '2026-04-01')
+    const sub = result.find(r => r.itemId === 'sub1')
+    expect(sub?.qty).toBe(6)
+  })
+
+  test('sub-item linked to multiple parents accumulates across parents', () => {
+    const eq2: EquipmentRow = { ...BASE_EQUIPMENT, id: 'eq2', name: 'Water Slide' }
+    const b1: BookingRow = { ...BASE_BOOKING, id: 'b1', event_type: 'dropoff' }
+    const b2: BookingRow = { ...BASE_BOOKING, id: 'b2', event_type: 'dropoff' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
+      { id: 'bi2', booking_id: 'b2', item_id: 'eq2', qty: 3, is_sub_item: false, parent_item_id: null },
+    ]
+    const links: SubItemLinkRow[] = [
+      { id: 'lnk1', sub_item_id: 'sub1', parent_id: 'eq1', loadout_qty: 1 },
+      { id: 'lnk2', sub_item_id: 'sub1', parent_id: 'eq2', loadout_qty: 1 },
+    ]
+    // drop: 2×1 + 3×1 = 5
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT, eq2], [BASE_SUB_ITEM], links, 'chain_1', '2026-04-01')
+    const sub = result.find(r => r.itemId === 'sub1')
+    expect(sub?.qty).toBe(5)
   })
 
   test('items with qty 0 are excluded from results', () => {
@@ -186,7 +221,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 0, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
 
@@ -195,7 +230,7 @@ describe('calculatePackingList', () => {
     const items: BookingItemRow[] = [
       { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: -1, is_sub_item: false, parent_item_id: null },
     ]
-    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], 'chain_1', '2026-04-01')
+    const result = calculatePackingList([booking], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
     expect(result).toHaveLength(0)
   })
 })

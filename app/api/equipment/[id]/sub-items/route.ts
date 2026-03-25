@@ -11,7 +11,7 @@ export async function POST(
 
   const { id: parentId } = await params
   const body = await request.json()
-  const { id, name, total_qty } = body
+  const { id, name, total_qty, loadout_qty = 1 } = body
 
   if (!id || !name || total_qty == null) {
     return NextResponse.json({ error: 'id, name, and total_qty are required' }, { status: 400 })
@@ -25,5 +25,12 @@ export async function POST(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Create the corresponding link row
+  await supabase
+    .from('equipment_sub_item_links')
+    .insert({ sub_item_id: id, parent_id: parentId, loadout_qty })
+    .select()
+
   return NextResponse.json(data, { status: 201 })
 }

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { useBookings, useDeleteBooking, useUpdateBooking, useAssignChain } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { canWrite, canAssignChain } from '@/lib/auth/roles'
@@ -286,7 +287,22 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
                   key={booking.id}
                   className={`border-b hover:bg-gray-50 ${isCanceled ? 'opacity-50' : ''}`}
                 >
-                  <td className="px-3 py-2 font-medium">{booking.customer_name}</td>
+                  <td className="px-3 py-2 font-medium">
+                    <span className="inline-flex items-center gap-1.5">
+                      {booking.customer_name}
+                      {booking.zenbooker_job_id && (
+                        <a
+                          href={`https://zenbooker.com/app?view=jobs&view-job=${booking.zenbooker_job_id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-500 hover:text-blue-700"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <ExternalLink size={12} />
+                        </a>
+                      )}
+                    </span>
+                  </td>
                   <td className="px-3 py-2 tabular-nums">
                     {booking.event_date}
                     {booking.end_date && ` – ${booking.end_date}`}

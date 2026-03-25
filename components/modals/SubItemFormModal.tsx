@@ -22,6 +22,7 @@ export function SubItemFormModal({ parentId, parentName, item, onClose }: Props)
   const [id, setId] = useState(item?.id ?? '')
   const [name, setName] = useState(item?.name ?? '')
   const [totalQty, setTotalQty] = useState(item?.total_qty ?? 1)
+  const [loadoutQty, setLoadoutQty] = useState(1)
   const [error, setError] = useState<string | null>(null)
 
   const create = useCreateSubItem()
@@ -33,13 +34,14 @@ export function SubItemFormModal({ parentId, parentName, item, onClose }: Props)
     setError(null)
     try {
       if (isEdit) {
-        await update.mutateAsync({ parentId, subId: item.id, name, total_qty: totalQty })
+        await update.mutateAsync({ parentId, subId: item.id, name, total_qty: totalQty, loadout_qty: loadoutQty })
       } else {
         await create.mutateAsync({
           parentId,
           id: id.trim().toLowerCase().replace(/\s+/g, '_'),
           name,
           total_qty: totalQty,
+          loadout_qty: loadoutQty,
         })
       }
       onClose()
@@ -70,6 +72,11 @@ export function SubItemFormModal({ parentId, parentName, item, onClose }: Props)
             <Label htmlFor="qty">Total Quantity</Label>
             <Input id="qty" type="number" min={0} value={totalQty}
               onChange={e => setTotalQty(Number(e.target.value))} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="loadout_qty">Loadout Qty per Parent</Label>
+            <Input id="loadout_qty" type="number" min={1} value={loadoutQty}
+              onChange={e => setLoadoutQty(Number(e.target.value))} required />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <DialogFooter>

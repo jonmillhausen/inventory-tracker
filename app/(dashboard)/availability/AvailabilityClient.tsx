@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
@@ -90,7 +91,20 @@ function ChainPopup({
         <div className="space-y-3 max-h-64 overflow-y-auto">
           {bookings.map(b => (
             <div key={b.id} className="text-xs border-b pb-2 last:border-0 last:pb-0">
-              <div className="font-medium">{b.customer_name}</div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="font-medium">{b.customer_name}</span>
+                {b.zenbooker_job_id && (
+                  <a
+                    href={`https://zenbooker.com/app?view=jobs&view-job=${b.zenbooker_job_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="text-blue-500 hover:text-blue-700 flex-shrink-0"
+                  >
+                    <ExternalLink size={10} />
+                  </a>
+                )}
+              </div>
               <div className="text-gray-400">{b.start_time ? to12(b.start_time) : '—'} – {b.end_time ? to12(b.end_time) : '—'}</div>
               <div className="text-gray-400 truncate">{b.address}</div>
               {b.items.length > 0 && (

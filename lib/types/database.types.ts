@@ -74,6 +74,21 @@ export interface Database {
         Update: Partial<{ name: string; total_qty: number; is_active: boolean }>
         Relationships: []
       }
+      equipment_sub_item_links: {
+        Row: {
+          id: string
+          sub_item_id: string
+          parent_id: string
+          loadout_qty: number
+        }
+        Insert: {
+          sub_item_id: string
+          parent_id: string
+          loadout_qty?: number
+        }
+        Update: Partial<{ loadout_qty: number }>
+        Relationships: []
+      }
       issue_flag_items: {
         Row: {
           id: string

@@ -1,197 +1,486 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useBookings } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
+import { useEquipment } from '@/lib/queries/equipment'
 import { isBookingActiveOnDate } from '@/lib/utils/availability'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Truck, MapPin, ExternalLink, X } from 'lucide-react'
 import type { Database } from '@/lib/types/database.types'
 import type { BookingsData } from '@/lib/queries/bookings'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type ChainRow = Database['public']['Tables']['chains']['Row']
+type EquipmentRow = Database['public']['Tables']['equipment']['Row']
+type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 
 interface Props {
   initialData: BookingsData
   initialChains: ChainRow[]
+  initialEquipment: EquipmentRow[]
 }
 
-const START_MIN = 7 * 60   // 420 — 7:00am
-const END_MIN = 22 * 60    // 1320 — 10:00pm
-const RANGE = END_MIN - START_MIN  // 900
+const BASE_ADDRESS = '4811 Benson Ave, Arbutus, MD 21227'
+const START_H = 6
+const END_H = 23
+const PX_PER_MIN = 1.2
+const TOTAL_PX = (END_H - START_H) * 60 * PX_PER_MIN
+const FALLBACK_TRAVEL_MIN = 30
 
-function timeToMin(time: string): number {
+const HOURS = Array.from({ length: END_H - START_H + 1 }, (_, i) => i + START_H)
+
+function yPos(minOfDay: number): number {
+  return (minOfDay - START_H * 60) * PX_PER_MIN
+}
+
+function timeToMin(time: string | null | undefined): number {
+  if (!time) return 0
   const [h, m] = time.split(':').map(Number)
-  return h * 60 + m
+  return h * 60 + (m || 0)
 }
 
-function getLeft(startTime: string): string {
-  const min = Math.max(timeToMin(startTime), START_MIN)
-  return `${((min - START_MIN) / RANGE) * 100}%`
-}
-
-function getWidth(startTime: string, endTime: string): string {
-  const start = Math.max(timeToMin(startTime), START_MIN)
-  const end = Math.min(timeToMin(endTime), END_MIN)
-  return `${(Math.max(0, end - start) / RANGE) * 100}%`
-}
-
-function formatTime12(time: string): string {
+function formatTime12(time: string | null | undefined): string {
+  if (!time) return '—'
   const [h, m] = time.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   const hour = h % 12 || 12
   return `${hour}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
-const HOURS = Array.from({ length: 16 }, (_, i) => i + 7) // 7 through 22
+function formatHour(h: number): string {
+  if (h === 12) return '12p'
+  return h < 12 ? `${h}a` : `${h - 12}p`
+}
 
-export function ScheduleClient({ initialData, initialChains }: Props) {
+function getSetup(
+  booking: BookingRow,
+  allBookingItems: BookingItemRow[],
+  equipmentMap: Map<string, EquipmentRow>,
+): { before: number; after: number } {
+  const et = booking.event_type
+  if (et === 'willcall') return { before: 0, after: 0 }
+  if (et === 'dropoff') return { before: 15, after: 0 }
+  if (et === 'pickup') return { before: 0, after: 15 }
+  // coordinated: use custom times from equipment, default 45/45
+  const items = allBookingItems.filter(bi => bi.booking_id === booking.id)
+  let maxSetup = 0
+  let maxCleanup = 0
+  let hasCustomSetup = false
+  let hasCustomCleanup = false
+  for (const bi of items) {
+    const eq = equipmentMap.get(bi.item_id)
+    if (eq?.custom_setup_min != null) {
+      hasCustomSetup = true
+      maxSetup = Math.max(maxSetup, eq.custom_setup_min)
+    }
+    if (eq?.custom_cleanup_min != null) {
+      hasCustomCleanup = true
+      maxCleanup = Math.max(maxCleanup, eq.custom_cleanup_min)
+    }
+  }
+  return { before: hasCustomSetup ? maxSetup : 45, after: hasCustomCleanup ? maxCleanup : 45 }
+}
+
+async function fetchTravelMin(from: string, to: string, date: string, time: string): Promise<number> {
+  try {
+    const params = new URLSearchParams({ from, to, date, time })
+    const res = await fetch(`/api/travel-estimates?${params}`)
+    if (!res.ok) return FALLBACK_TRAVEL_MIN
+    const data = await res.json()
+    return typeof data.minutes === 'number' ? data.minutes : FALLBACK_TRAVEL_MIN
+  } catch {
+    return FALLBACK_TRAVEL_MIN
+  }
+}
+
+export function ScheduleClient({ initialData, initialChains, initialEquipment }: Props) {
   const today = new Date().toISOString().split('T')[0]
   const [selectedDate, setSelectedDate] = useState(today)
+  const [showTravel, setShowTravel] = useState(true)
+  const [showSetup, setShowSetup] = useState(true)
+  const [popupId, setPopupId] = useState<string | null>(null)
+  // travelTimes: key = "${from}::${to}", value = minutes
+  const [travelTimes, setTravelTimes] = useState<Map<string, number>>(new Map())
 
   const { data } = useBookings(initialData)
   const { data: chains = [] } = useChains(initialChains)
+  const { data: equipment = [] } = useEquipment(initialEquipment)
 
   const bookings = data?.bookings ?? []
+  const bookingItems = data?.bookingItems ?? []
+
+  const equipmentMap = useMemo(() => {
+    const m = new Map<string, EquipmentRow>()
+    for (const eq of equipment) m.set(eq.id, eq)
+    return m
+  }, [equipment])
 
   // Active, non-canceled bookings for selected date
-  const activeBookings = useMemo(() => {
-    return bookings.filter(b => isBookingActiveOnDate(b, selectedDate))
-  }, [bookings, selectedDate])
+  const activeBookings = useMemo(
+    () => bookings.filter(b => isBookingActiveOnDate(b, selectedDate)),
+    [bookings, selectedDate],
+  )
 
-  // Build rows: one per active chain + unassigned
-  interface ScheduleRow {
+  // Build chain columns: active chains that have bookings + unassigned
+  interface ScheduleCol {
     id: string
     name: string
     color: string
     bookings: BookingRow[]
   }
 
-  const rows: ScheduleRow[] = useMemo(() => {
-    const chainRows: ScheduleRow[] = chains.map(c => ({
+  const columns: ScheduleCol[] = useMemo(() => {
+    const chainCols: ScheduleCol[] = chains.map(c => ({
       id: c.id,
       name: c.name,
       color: c.color,
-      bookings: activeBookings.filter(b => b.chain === c.id),
+      bookings: activeBookings
+        .filter(b => b.chain === c.id)
+        .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
     }))
 
     const unassigned = activeBookings.filter(b => !b.chain)
     if (unassigned.length > 0) {
-      chainRows.push({
+      chainCols.push({
         id: '__unassigned__',
         name: 'Unassigned',
         color: '#9ca3af',
-        bookings: unassigned,
+        bookings: unassigned.sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
       })
     }
 
-    return chainRows.filter(r => r.bookings.length > 0)
+    return chainCols.filter(c => c.bookings.length > 0)
   }, [chains, activeBookings])
 
+  // Fetch travel times for all routes when date or columns change
+  const fetchAllTravelTimes = useCallback(async () => {
+    if (!showTravel) return
+    const pairs: Array<{ from: string; to: string; time: string }> = []
+
+    for (const col of columns) {
+      const evts = col.bookings
+      for (let i = 0; i < evts.length; i++) {
+        const toAddr = evts[i].address ?? ''
+        if (!toAddr) continue
+        if (i === 0) {
+          pairs.push({ from: BASE_ADDRESS, to: toAddr, time: evts[i].start_time ?? '08:00' })
+        } else {
+          const fromAddr = evts[i - 1].address ?? ''
+          if (fromAddr) {
+            pairs.push({ from: fromAddr, to: toAddr, time: evts[i].start_time ?? '08:00' })
+          }
+        }
+      }
+    }
+
+    if (pairs.length === 0) return
+
+    const results = await Promise.all(
+      pairs.map(p => fetchTravelMin(p.from, p.to, selectedDate, p.time).then(min => ({ key: `${p.from}::${p.to}`, min })))
+    )
+
+    setTravelTimes(prev => {
+      const next = new Map(prev)
+      for (const { key, min } of results) next.set(key, min)
+      return next
+    })
+  }, [columns, selectedDate, showTravel])
+
+  useEffect(() => {
+    fetchAllTravelTimes()
+  }, [fetchAllTravelTimes])
+
+  function getTravelMin(from: string, to: string): number {
+    return travelTimes.get(`${from}::${to}`) ?? FALLBACK_TRAVEL_MIN
+  }
+
+  const colWidth = Math.max(120, 900 / Math.max(columns.length, 1))
+  const gridWidth = 50 + colWidth * columns.length
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Schedule Board</h1>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="schedDate" className="text-sm font-medium">Date</Label>
-          <Input
-            id="schedDate"
-            type="date"
-            className="w-44"
-            value={selectedDate}
-            onChange={e => setSelectedDate(e.target.value)}
-          />
+        <div className="flex items-center gap-4">
+          {/* Toggle controls */}
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showTravel}
+              onChange={() => setShowTravel(v => !v)}
+              className="accent-blue-500"
+            />
+            Travel Time
+          </label>
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showSetup}
+              onChange={() => setShowSetup(v => !v)}
+              className="accent-blue-500"
+            />
+            Setup/Cleanup
+          </label>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="schedDate" className="text-sm font-medium">Date</Label>
+            <Input
+              id="schedDate"
+              type="date"
+              className="w-44"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
       <div className="text-sm text-gray-500">
         {activeBookings.length} event{activeBookings.length !== 1 ? 's' : ''} on{' '}
         {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
-          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
         })}
       </div>
 
-      <div className="overflow-x-auto rounded-md border bg-white">
-        <div style={{ minWidth: '900px' }}>
-          {/* Time header */}
-          <div className="flex border-b">
-            <div className="flex-none w-32" />
-            <div className="flex flex-1">
+      {columns.length === 0 ? (
+        <div className="rounded-md border bg-white py-16 text-center text-sm text-gray-400">
+          No events scheduled for this date
+        </div>
+      ) : (
+        <div className="rounded-md border bg-white overflow-auto">
+          <div style={{ minWidth: gridWidth, display: 'grid', gridTemplateColumns: `50px repeat(${columns.length}, 1fr)` }}>
+            {/* Header row */}
+            <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500">
+              Time
+            </div>
+            {columns.map(col => (
+              <div
+                key={col.id}
+                className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center"
+              >
+                <span
+                  className="inline-block px-2 py-0.5 rounded text-xs font-bold"
+                  style={{ backgroundColor: col.color + '33', color: col.color, border: `1px solid ${col.color}66` }}
+                >
+                  {col.name}
+                </span>
+              </div>
+            ))}
+
+            {/* Time label column */}
+            <div className="relative border-r border-gray-100" style={{ height: TOTAL_PX }}>
               {HOURS.map(h => (
                 <div
                   key={h}
-                  className="flex-1 text-xs text-center text-gray-400 py-1 border-l"
+                  className="absolute left-0 right-0 text-right pr-1"
+                  style={{ top: yPos(h * 60) - 6, fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}
                 >
-                  {h === 12 ? '12pm' : h < 12 ? `${h}am` : `${h - 12}pm`}
+                  {formatHour(h)}
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Chain rows */}
-          {rows.length === 0 ? (
-            <div className="py-12 text-center text-gray-400 text-sm">
-              No events scheduled for this date
-            </div>
-          ) : (
-            rows.map(row => (
-              <div key={row.id} className="flex border-b last:border-b-0 hover:bg-gray-50">
-                {/* Chain label */}
+              {HOURS.map(h => (
                 <div
-                  className="flex-none w-32 px-3 py-2 flex items-center text-sm font-medium truncate"
-                  style={{ color: row.color }}
-                >
-                  <span
-                    className="inline-block w-2 h-2 rounded-full mr-2 flex-none"
-                    style={{ backgroundColor: row.color }}
-                  />
-                  <span className="truncate">{row.name}</span>
-                </div>
+                  key={'line' + h}
+                  className="absolute left-0 right-0 border-b border-gray-100"
+                  style={{ top: yPos(h * 60), height: 0 }}
+                />
+              ))}
+            </div>
 
-                {/* Timeline area */}
-                <div className="relative flex-1 h-14 border-l">
+            {/* Chain columns */}
+            {columns.map(col => {
+              const evts = col.bookings
+              return (
+                <div
+                  key={col.id}
+                  className="relative border-l border-gray-100"
+                  style={{ height: TOTAL_PX }}
+                >
                   {/* Hour grid lines */}
-                  {HOURS.slice(1).map(h => (
+                  {HOURS.map(h => (
                     <div
-                      key={h}
-                      className="absolute top-0 bottom-0 border-l border-gray-100"
-                      style={{ left: `${((h * 60 - START_MIN) / RANGE) * 100}%` }}
+                      key={'g' + h}
+                      className="absolute left-0 right-0 border-b border-gray-100"
+                      style={{ top: yPos(h * 60), height: 0 }}
                     />
                   ))}
 
-                  {/* Booking cards */}
-                  {row.bookings.map(booking => (
-                    <div
-                      key={booking.id}
-                      className="absolute top-1 bottom-1 rounded text-xs text-white px-1 overflow-hidden flex items-center cursor-default select-none shadow-sm"
-                      style={{
-                        left: getLeft(booking.start_time ?? '00:00'),
-                        width: getWidth(booking.start_time ?? '00:00', booking.end_time ?? '00:00'),
-                        backgroundColor: row.color,
-                        minWidth: '4px',
-                      }}
-                      title={`${booking.customer_name}\n${booking.start_time ? formatTime12(booking.start_time) : '—'}–${booking.end_time ? formatTime12(booking.end_time) : '—'}\n${booking.event_type}\n${booking.address}`}
-                    >
-                      <span className="truncate">
-                        {booking.customer_name}
-                      </span>
-                    </div>
-                  ))}
+                  {evts.map((booking, bi) => {
+                    const s = timeToMin(booking.start_time)
+                    const e = timeToMin(booking.end_time)
+                    const su = getSetup(booking, bookingItems, equipmentMap)
+                    const eventHeight = Math.max((e - s) * PX_PER_MIN, 20)
+                    const fromAddr = bi === 0 ? BASE_ADDRESS : (evts[bi - 1].address ?? BASE_ADDRESS)
+                    const toAddr = booking.address ?? ''
+                    const travelMin = toAddr ? getTravelMin(fromAddr, toAddr) : FALLBACK_TRAVEL_MIN
+                    const isOpen = popupId === booking.id
+
+                    // booking items for equipment list in popup
+                    const items = bookingItems.filter(bi2 => bi2.booking_id === booking.id)
+
+                    return (
+                      <div key={booking.id}>
+                        {/* Travel block */}
+                        {showTravel && (
+                          <div
+                            className="absolute left-0.5 right-0.5 flex items-center justify-center gap-0.5 rounded overflow-hidden border border-gray-200"
+                            style={{
+                              top: bi === 0
+                                ? yPos(Math.max(s - su.before - travelMin, START_H * 60))
+                                : yPos(timeToMin(evts[bi - 1].end_time) + getSetup(evts[bi - 1], bookingItems, equipmentMap).after),
+                              height: bi === 0
+                                ? travelMin * PX_PER_MIN
+                                : Math.max(
+                                    Math.min(
+                                      travelMin,
+                                      Math.max(s - su.before - timeToMin(evts[bi - 1].end_time) - getSetup(evts[bi - 1], bookingItems, equipmentMap).after, 0)
+                                    ),
+                                    0
+                                  ) * PX_PER_MIN || travelMin * PX_PER_MIN,
+                              backgroundColor: '#f1f5f9',
+                              fontSize: 8,
+                              color: '#64748b',
+                            }}
+                          >
+                            <Truck size={8} />
+                            <span>{travelMin}m</span>
+                          </div>
+                        )}
+
+                        {/* Setup block */}
+                        {showSetup && su.before > 0 && (
+                          <div
+                            className="absolute left-0.5 right-0.5 flex items-center justify-center rounded"
+                            style={{
+                              top: yPos(s - su.before),
+                              height: su.before * PX_PER_MIN,
+                              border: `1px dashed ${col.color}`,
+                              fontSize: 8,
+                              color: '#1e293b',
+                            }}
+                          >
+                            {su.before}m Setup
+                          </div>
+                        )}
+
+                        {/* Event block */}
+                        <div
+                          onClick={() => setPopupId(isOpen ? null : booking.id)}
+                          className="absolute left-0.5 right-0.5 rounded overflow-hidden cursor-pointer"
+                          style={{
+                            top: yPos(s),
+                            height: eventHeight,
+                            backgroundColor: col.color + '33',
+                            border: `2px solid ${col.color}`,
+                            padding: '2px 4px',
+                            fontSize: 9,
+                          }}
+                        >
+                          <div className="font-bold truncate" style={{ color: '#1e293b' }}>
+                            {booking.customer_name || 'Event'}
+                          </div>
+                          <div style={{ opacity: 0.7, fontSize: 8 }}>
+                            {formatTime12(booking.start_time)}–{formatTime12(booking.end_time)}
+                          </div>
+                          <div style={{ fontSize: 7, textTransform: 'capitalize', opacity: 0.6 }}>
+                            {booking.event_type ?? 'coordinated'}
+                          </div>
+                        </div>
+
+                        {/* Event popup */}
+                        {isOpen && (
+                          <div
+                            onClick={ev => ev.stopPropagation()}
+                            className="absolute left-0 right-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg"
+                            style={{
+                              top: yPos(s) + eventHeight + 4,
+                              padding: 10,
+                              fontSize: 11,
+                            }}
+                          >
+                            <div className="flex items-start justify-between mb-1.5">
+                              <div>
+                                <div className="font-bold" style={{ fontSize: 12 }}>
+                                  {booking.customer_name || 'Unnamed'}
+                                </div>
+                                {booking.zenbooker_job_id && (
+                                  <a
+                                    href={`https://zenbooker.com/app?view=jobs&view-job=${booking.zenbooker_job_id}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={ev => ev.stopPropagation()}
+                                    className="inline-flex items-center gap-1 text-blue-500 hover:underline"
+                                    style={{ fontSize: 10 }}
+                                  >
+                                    View in Zenbooker <ExternalLink size={8} />
+                                  </a>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => setPopupId(null)}
+                                className="text-gray-400 hover:text-gray-600"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+
+                            {booking.address && (
+                              <div className="flex items-center gap-1 text-gray-500 mb-1.5" style={{ fontSize: 10 }}>
+                                <MapPin size={9} />
+                                {booking.address}
+                              </div>
+                            )}
+
+                            {items.length > 0 && (
+                              <div>
+                                <div className="text-gray-400 font-semibold uppercase mb-1" style={{ fontSize: 9, letterSpacing: '0.5px' }}>
+                                  Equipment
+                                </div>
+                                {items.map((item, i) => (
+                                  <div key={i} className="flex justify-between" style={{ fontSize: 10, padding: '1px 0' }}>
+                                    <span>{equipmentMap.get(item.item_id)?.name ?? item.item_id}</span>
+                                    <span className="font-semibold">×{item.qty}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Cleanup block */}
+                        {showSetup && su.after > 0 && (
+                          <div
+                            className="absolute left-0.5 right-0.5 flex items-center justify-center rounded"
+                            style={{
+                              top: yPos(e),
+                              height: su.after * PX_PER_MIN,
+                              border: `1px dashed ${col.color}`,
+                              fontSize: 8,
+                              color: '#1e293b',
+                            }}
+                          >
+                            {su.after}m Cleanup
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              </div>
-            ))
-          )}
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Legend */}
-      {chains.length > 0 && (
+      {columns.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          {chains.map(c => (
-            <div key={c.id} className="flex items-center gap-1.5 text-xs text-gray-600">
-              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
-              {c.name}
+          {columns.map(col => (
+            <div key={col.id} className="flex items-center gap-1.5 text-xs text-gray-600">
+              <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: col.color }} />
+              {col.name}
             </div>
           ))}
         </div>

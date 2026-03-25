@@ -7,6 +7,7 @@ import type { BookingsData } from '@/lib/queries/bookings'
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 type ChainRow = Database['public']['Tables']['chains']['Row']
+type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 
 export default async function SchedulePage() {
   const supabase = await createClient()
@@ -18,10 +19,12 @@ export default async function SchedulePage() {
     { data: bookings },
     { data: bookingItems },
     { data: chains },
+    { data: equipment },
   ] = await Promise.all([
     supabase.from('bookings').select('*').order('event_date', { ascending: false }),
     supabase.from('booking_items').select('*'),
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
+    supabase.from('equipment').select('*').eq('is_active', true).order('name'),
   ])
 
   const initialData: BookingsData = {
@@ -33,6 +36,7 @@ export default async function SchedulePage() {
     <ScheduleClient
       initialData={initialData}
       initialChains={(chains ?? []) as ChainRow[]}
+      initialEquipment={(equipment ?? []) as EquipmentRow[]}
     />
   )
 }

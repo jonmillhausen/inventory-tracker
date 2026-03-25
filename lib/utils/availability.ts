@@ -38,6 +38,7 @@ export type ChainBooking = {
   address: string
   start_time: string | null
   end_time: string | null
+  zenbooker_job_id: string | null
   items: Array<{ item_id: string; qty: number }>
 }
 
@@ -233,6 +234,7 @@ export function getChainBookings(
       address: b.address,
       start_time: b.start_time,
       end_time: b.end_time,
+      zenbooker_job_id: b.zenbooker_job_id ?? null,
       items: bookingItemsByBookingId.get(b.id) ?? [],
     }))
     .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))

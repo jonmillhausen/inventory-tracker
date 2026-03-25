@@ -95,7 +95,7 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
                   <tr key={serviceId} className="hover:bg-gray-50">
                     <td className="px-4 py-3 font-medium">{group.name}</td>
                     <td className="px-4 py-3 text-gray-400">—</td>
-                    <td className="px-4 py-3">{equipById.get(row.item_id)?.name ?? row.item_id}</td>
+                    <td className="px-4 py-3">{equipById.get(row.item_id ?? '')?.name ?? row.item_id ?? '—'}</td>
                     <td className="px-4 py-3 text-center">
                       {row.use_customer_qty
                         ? <Badge className="bg-blue-100 text-blue-800">Customer</Badge>
@@ -134,7 +134,7 @@ export function ServiceMappingsClient({ initialMappings, initialEquipment }: Pro
                     <tr key={row.id} className="bg-gray-50/50 text-xs">
                       <td className="px-4 py-2 pl-8 text-gray-500">{group.name}</td>
                       <td className="px-4 py-2 text-gray-700">{row.zenbooker_modifier_name}</td>
-                      <td className="px-4 py-2">{equipById.get(row.item_id)?.name ?? row.item_id}</td>
+                      <td className="px-4 py-2">{equipById.get(row.item_id ?? '')?.name ?? row.item_id ?? '—'}</td>
                       <td className="px-4 py-2 text-center">
                         {row.use_customer_qty
                           ? <Badge className="bg-blue-100 text-blue-800 text-xs">Customer</Badge>

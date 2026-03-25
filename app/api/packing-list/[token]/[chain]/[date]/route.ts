@@ -7,6 +7,7 @@ type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 type ChainRow = Database['public']['Tables']['chains']['Row']
 
 export async function GET(
@@ -56,17 +57,19 @@ export async function GET(
     { data: bookingItems, error: biErr },
     { data: equipment, error: eErr },
     { data: subItems, error: sErr },
+    { data: subItemLinks, error: slErr },
     { data: chainsRaw, error: cErr },
   ] = await Promise.all([
     supabase.from('bookings').select('*'),
     supabase.from('booking_items').select('*'),
     supabase.from('equipment').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_items').select('*').eq('is_active', true).order('name'),
+    supabase.from('equipment_sub_item_links').select('*'),
     supabase.from('chains').select('*').eq('id', chain).single(),
   ])
   const chains = chainsRaw as ChainRow | null
 
-  if (bErr || biErr || eErr || sErr) {
+  if (bErr || biErr || eErr || sErr || slErr) {
     return new Response('Internal Server Error', { status: 500 })
   }
 
@@ -77,6 +80,7 @@ export async function GET(
     bookingItems as BookingItemRow[],
     equipment as EquipmentRow[],
     subItems as SubItemRow[],
+    subItemLinks as SubItemLinkRow[],
     chain,
     date
   )

@@ -6,6 +6,7 @@ import type { Database } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 
 export const EQUIPMENT_KEY = ['equipment'] as const
 
@@ -38,6 +39,23 @@ export function useEquipmentSubItems(initialData?: SubItemRow[]) {
         .order('name')
       if (error) throw error
       return data as SubItemRow[]
+    },
+    initialData,
+  })
+}
+
+export const SUB_ITEM_LINKS_KEY = ['equipment_sub_item_links'] as const
+
+export function useSubItemLinks(initialData?: SubItemLinkRow[]) {
+  return useQuery({
+    queryKey: SUB_ITEM_LINKS_KEY,
+    queryFn: async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_sub_item_links')
+        .select('*')
+      if (error) throw error
+      return data as SubItemLinkRow[]
     },
     initialData,
   })
@@ -91,7 +109,7 @@ export function useDeactivateEquipment() {
 export function useCreateSubItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ parentId, ...body }: { parentId: string; id: string; name: string; total_qty: number }) => {
+    mutationFn: async ({ parentId, ...body }: { parentId: string; id: string; name: string; total_qty: number; loadout_qty?: number }) => {
       const res = await fetch(`/api/equipment/${parentId}/sub-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,6 +120,7 @@ export function useCreateSubItem() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
       qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
     },
   })
@@ -110,7 +129,7 @@ export function useCreateSubItem() {
 export function useUpdateSubItem() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ parentId, subId, ...body }: { parentId: string; subId: string; name?: string; total_qty?: number; is_active?: boolean }) => {
+    mutationFn: async ({ parentId, subId, ...body }: { parentId: string; subId: string; name?: string; total_qty?: number; is_active?: boolean; loadout_qty?: number }) => {
       const res = await fetch(`/api/equipment/${parentId}/sub-items/${subId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -121,6 +140,7 @@ export function useUpdateSubItem() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
       qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
     },
   })

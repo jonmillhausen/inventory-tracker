@@ -12,9 +12,9 @@ export async function PATCH(
   const auth = await getSessionAndRole(['admin'])
   if (auth instanceof NextResponse) return auth
 
-  const { subId } = await params
+  const { id: parentId, subId } = await params
   const body = await request.json()
-  const { name, total_qty, is_active } = body
+  const { name, total_qty, is_active, loadout_qty } = body
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -25,6 +25,16 @@ export async function PATCH(
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Update loadout_qty on the link for this specific parent-sub combination
+  if (loadout_qty != null) {
+    await supabase
+      .from('equipment_sub_item_links')
+      .update({ loadout_qty })
+      .eq('sub_item_id', subId)
+      .eq('parent_id', parentId)
+  }
+
   return NextResponse.json(data)
 }
 

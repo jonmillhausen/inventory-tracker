@@ -5,6 +5,7 @@ type BookingRow = Database['public']['Tables']['bookings']['Row']
 type BookingItemRow = Database['public']['Tables']['booking_items']['Row']
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 type EventType = Database['public']['Enums']['event_type']
 
 export interface PackingListRow {
@@ -23,6 +24,7 @@ export function calculatePackingList(
   bookingItems: BookingItemRow[],
   equipment: EquipmentRow[],
   subItems: SubItemRow[],
+  subItemLinks: SubItemLinkRow[],
   chain: string,
   date: string
 ): PackingListRow[] {
@@ -36,8 +38,8 @@ export function calculatePackingList(
   const coordIds = new Set(activeBookings.filter(b => COORD_TYPES.includes(b.event_type)).map(b => b.id))
   const allActiveIds = new Set(activeBookings.map(b => b.id))
 
-  // Step 3: Filter booking_items to active bookings only
-  const activeItems = bookingItems.filter(bi => allActiveIds.has(bi.booking_id))
+  // Step 3: Filter to parent equipment items only (sub-items are derived from links)
+  const activeItems = bookingItems.filter(bi => allActiveIds.has(bi.booking_id) && !bi.is_sub_item)
 
   // Step 4: Per item_id — compute dropQty (sum) and coordQty (max)
   const dropQtyMap = new Map<string, number>()
@@ -53,34 +55,68 @@ export function calculatePackingList(
     }
   }
 
-  // Step 5: Collect all item IDs that appear in any active booking
+  // Step 5: Collect all parent item IDs with non-zero qty
   const allItemIds = new Set([...dropQtyMap.keys(), ...coordQtyMap.keys()])
 
-  // Step 6: Build name lookup maps
+  // Step 6: Build equipment name lookup
   const equipmentMap = new Map(equipment.map(e => [e.id, e.name]))
-  const subItemMap = new Map(subItems.map(s => [s.id, s.name]))
 
-  // Step 7: Build a map of sub-item → parent_item_id from bookingItems
-  const parentMap = new Map<string, string | null>()
-  const isSubMap = new Map<string, boolean>()
-  for (const bi of activeItems) {
-    parentMap.set(bi.item_id, bi.parent_item_id)
-    isSubMap.set(bi.item_id, bi.is_sub_item)
-  }
-
-  // Step 8: Assemble results
+  // Step 7: Assemble parent item rows
   const rows: PackingListRow[] = []
   for (const itemId of allItemIds) {
     const dropQty = dropQtyMap.get(itemId) ?? 0
     const coordQty = coordQtyMap.get(itemId) ?? 0
     const qty = dropQty + coordQty
     if (qty <= 0) continue
+    const name = equipmentMap.get(itemId) ?? itemId
+    rows.push({ itemId, name, qty, isSubItem: false, parentItemId: null })
+  }
 
-    const name = equipmentMap.get(itemId) ?? subItemMap.get(itemId) ?? itemId
-    const isSubItem = isSubMap.get(itemId) ?? false
-    const parentItemId = parentMap.get(itemId) ?? null
+  // Step 8: Derive sub-items from equipment_sub_item_links.
+  //
+  // For each link (parent → sub, loadout_qty):
+  //   drop contribution  = parentDropQty  × loadout_qty  (summed across all linked parents)
+  //   coord contribution = parentCoordQty × loadout_qty  (max across all linked parents)
+  //
+  // The primary parent for display grouping is the first contributing parent encountered.
+  const subDropQtyMap = new Map<string, number>()
+  const subCoordQtyMap = new Map<string, number>()
+  const subPrimaryParentMap = new Map<string, string>()
 
-    rows.push({ itemId, name, qty, isSubItem, parentItemId })
+  for (const link of subItemLinks) {
+    const parentDropQty = dropQtyMap.get(link.parent_id) ?? 0
+    const parentCoordQty = coordQtyMap.get(link.parent_id) ?? 0
+
+    const dropContrib = parentDropQty * link.loadout_qty
+    const coordContrib = parentCoordQty * link.loadout_qty
+
+    if (dropContrib > 0) {
+      subDropQtyMap.set(link.sub_item_id, (subDropQtyMap.get(link.sub_item_id) ?? 0) + dropContrib)
+      if (!subPrimaryParentMap.has(link.sub_item_id)) {
+        subPrimaryParentMap.set(link.sub_item_id, link.parent_id)
+      }
+    }
+    if (coordContrib > 0) {
+      const existing = subCoordQtyMap.get(link.sub_item_id) ?? 0
+      if (coordContrib > existing) {
+        subCoordQtyMap.set(link.sub_item_id, coordContrib)
+      }
+      if (!subPrimaryParentMap.has(link.sub_item_id)) {
+        subPrimaryParentMap.set(link.sub_item_id, link.parent_id)
+      }
+    }
+  }
+
+  const subItemMap = new Map(subItems.map(s => [s.id, s]))
+  const allSubItemIds = new Set([...subDropQtyMap.keys(), ...subCoordQtyMap.keys()])
+
+  for (const subItemId of allSubItemIds) {
+    const sub = subItemMap.get(subItemId)
+    if (!sub || !sub.is_active) continue
+    const qty = (subDropQtyMap.get(subItemId) ?? 0) + (subCoordQtyMap.get(subItemId) ?? 0)
+    if (qty <= 0) continue
+    const parentItemId = subPrimaryParentMap.get(subItemId) ?? null
+    rows.push({ itemId: subItemId, name: sub.name, qty, isSubItem: true, parentItemId })
   }
 
   // Step 9: Sort by name
