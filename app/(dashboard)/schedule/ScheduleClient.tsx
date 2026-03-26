@@ -301,8 +301,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
       ) : (
         <div className="rounded-md border bg-white overflow-auto">
           <div style={{ minWidth: gridWidth, display: 'grid', gridTemplateColumns: `50px repeat(${columns.length}, 1fr)` }}>
-            {/* Header row */}
-            <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500">
+            {/* Header row — sticky */}
+            <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500 sticky top-0 z-20">
               Time
             </div>
             {columns.map(col => {
@@ -310,7 +310,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
               return (
                 <div
                   key={col.id}
-                  className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center"
+                  className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center sticky top-0 z-20"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span

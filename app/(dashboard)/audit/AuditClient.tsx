@@ -153,27 +153,27 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
         key={cell.date}
         onClick={() => handleCellClick(cell.date)}
         className={`
-          border rounded-lg p-2 cursor-pointer transition-colors min-h-[90px]
+          border rounded-lg p-2.5 cursor-pointer transition-colors min-h-[110px]
           ${isToday ? 'border-blue-400 bg-blue-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'}
         `}
       >
-        <div className="text-xs font-semibold text-gray-700 mb-1">{formatDayMonth(cell.date)}</div>
+        <div className="text-sm font-semibold text-gray-700 mb-1">{formatDayMonth(cell.date)}</div>
 
         {cell.eventCount === 0 ? (
-          <div className="text-[10px] text-gray-300 mt-2">No events</div>
+          <div className="text-xs text-gray-300 mt-2">No events</div>
         ) : (
           <>
-            <div className="text-[11px] text-gray-500 mb-1.5">
+            <div className="text-sm text-gray-500 mb-1.5">
               {cell.eventCount} event{cell.eventCount !== 1 ? 's' : ''}
             </div>
 
             {/* Chain circles */}
             {chainObjs.length > 0 && (
-              <div className="flex flex-wrap gap-0.5 mb-1.5">
+              <div className="flex flex-wrap gap-1 mb-1.5">
                 {chainObjs.map(c => (
                   <span
                     key={c.id}
-                    className="inline-flex items-center justify-center rounded-full text-[8px] font-bold w-4 h-4"
+                    className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5"
                     style={{
                       backgroundColor: c.color,
                       color: isLightColor(c.color) ? '#1e293b' : '#fff',
@@ -185,7 +185,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
                 ))}
                 {cell.hasUnassigned && (
                   <span
-                    className="inline-flex items-center justify-center rounded-full text-[8px] font-bold w-4 h-4"
+                    className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5"
                     style={{ backgroundColor: '#9ca3af', color: '#fff' }}
                     title="Unassigned"
                   >
@@ -195,21 +195,21 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
               </div>
             )}
 
-            {/* Warning icons */}
-            <div className="flex gap-1">
+            {/* Warning icons — 2× original size */}
+            <div className="flex gap-1.5 mt-1">
               {cell.isOverbooked && (
                 <span title="Equipment overbooked">
-                  <AlertTriangle size={11} className="text-red-500" />
+                  <AlertTriangle size={22} className="text-red-500" />
                 </span>
               )}
               {cell.hasOverlap && (
                 <span title="Schedule overlap">
-                  <Clock size={11} className="text-orange-500" />
+                  <Clock size={22} className="text-orange-500" />
                 </span>
               )}
               {cell.hasUnassigned && (
                 <span title="Unassigned events">
-                  <CircleHelp size={11} className="text-gray-400" />
+                  <CircleHelp size={22} className="text-gray-400" />
                 </span>
               )}
             </div>
@@ -235,9 +235,9 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><AlertTriangle size={11} className="text-red-500" /> Overbooked</span>
-        <span className="flex items-center gap-1"><Clock size={11} className="text-orange-500" /> Overlap</span>
-        <span className="flex items-center gap-1"><CircleHelp size={11} className="text-gray-400" /> Unassigned</span>
+        <span className="flex items-center gap-1"><AlertTriangle size={13} className="text-red-500" /> Overbooked</span>
+        <span className="flex items-center gap-1"><Clock size={13} className="text-orange-500" /> Overlap</span>
+        <span className="flex items-center gap-1"><CircleHelp size={13} className="text-gray-400" /> Unassigned</span>
       </div>
 
       {/* Week 1 */}
