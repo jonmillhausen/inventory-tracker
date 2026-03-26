@@ -30,7 +30,7 @@ export function ImportClient() {
 
     try {
       do {
-        const url = cursor
+        const url: string = cursor
           ? `/api/import/zenbooker?cursor=${encodeURIComponent(cursor)}`
           : '/api/import/zenbooker'
 
