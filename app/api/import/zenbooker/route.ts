@@ -55,7 +55,10 @@ export async function POST(request: Request) {
 
   console.log('[import] Fetching:', zbUrl.toString())
 
-  let zbResponse: ZenbookerJobsResponse
+  // ── DEBUG MODE: return raw API response for inspection ──────────────────
+  // Remove this block once the correct response shape is confirmed.
+  let rawText: string
+  let httpStatus: number
   try {
     const res = await fetch(zbUrl.toString(), {
       headers: {
@@ -63,29 +66,38 @@ export async function POST(request: Request) {
         'Zenbooker-Version': '2025-09-01',
       },
     })
+    httpStatus = res.status
     console.log('[import] HTTP status:', res.status, res.statusText)
-    const rawText = await res.text()
-    console.log('[import] Raw response (first 1000 chars):', rawText.slice(0, 1000))
-    if (!res.ok) {
-      return NextResponse.json(
-        { error: `Zenbooker API error: ${res.status} ${rawText}` },
-        { status: 502 }
-      )
-    }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(rawText)
-    } catch {
-      return NextResponse.json({ error: `Non-JSON response: ${rawText.slice(0, 200)}` }, { status: 502 })
-    }
-    console.log('[import] Top-level response keys:', Object.keys(parsed as object))
-    zbResponse = parsed as ZenbookerJobsResponse
-  } catch (err) {
-    return NextResponse.json(
-      { error: `Failed to fetch from Zenbooker: ${String(err)}` },
-      { status: 502 }
-    )
+    rawText = await res.text()
+    console.log('[import] rawText length:', rawText.length)
+    console.log('[import] rawText preview:', rawText.slice(0, 500))
+  } catch (fetchErr) {
+    return NextResponse.json({ debug_error: `fetch threw: ${String(fetchErr)}` }, { status: 502 })
   }
+
+  // Return raw response directly so it's visible in the browser (not just Vercel logs)
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(rawText) as Record<string, unknown>
+  } catch {
+    return NextResponse.json({
+      debug_http_status: httpStatus,
+      debug_raw_response: rawText.slice(0, 2000),
+      debug_parse_error: 'Response is not valid JSON',
+    })
+  }
+
+  return NextResponse.json({
+    debug_http_status: httpStatus,
+    debug_top_level_keys: Object.keys(parsed),
+    debug_raw_preview: rawText.slice(0, 2000),
+    // Hint at array lengths for any array-valued keys
+    debug_array_lengths: Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([, v]) => Array.isArray(v))
+        .map(([k, v]) => [k, (v as unknown[]).length])
+    ),
+  })
 
   const supabase = createServiceRoleClient()
 
