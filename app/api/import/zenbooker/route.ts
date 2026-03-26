@@ -3,6 +3,7 @@ import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { getSessionAndRole } from '@/lib/api/auth'
 import {
   resolveWebhookItems,
+  deduplicateItems,
   resolveEventType,
   extractEventDate,
   calcEndTime,
@@ -345,10 +346,11 @@ export async function POST(request: Request) {
       const bookingId = booking.id
 
       await supabase.from('booking_items').delete().eq('booking_id', bookingId)
-      if (resolvedItems.length > 0) {
+      const dedupedItems = deduplicateItems(resolvedItems)
+      if (dedupedItems.length > 0) {
         await supabase
           .from('booking_items')
-          .insert(resolvedItems.map(item => ({ ...item, booking_id: bookingId })))
+          .insert(dedupedItems.map(item => ({ ...item, booking_id: bookingId })))
       }
 
       const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'

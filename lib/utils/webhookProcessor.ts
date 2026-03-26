@@ -236,6 +236,11 @@ export function resolveWebhookItems(
     // It fires AT MOST ONCE — not once per unmatched option.
     let baseMappingPushed = false
 
+    // Snapshot resolved count so we can guard step 3 (equipment-name fallback):
+    // once ANY step resolves an item for this service, the name fallback is skipped
+    // for all remaining options in the same service.
+    const resolvedCountBefore = resolvedItems.length
+
     for (const option of allOptions) {
       // 1. Modifier-specific mappings: ALL rows for (service_id, option.id).
       //    Multiple rows are allowed — e.g. one option can map to two equipment items.
@@ -281,6 +286,9 @@ export function resolveWebhookItems(
               : mm.default_qty
             resolvedItems.push({ item_id: mm.item_id, qty, is_sub_item: false, parent_item_id: null })
           }
+          // Mark base mapping as consumed so a subsequent unmatched option in
+          // the same service cannot also fire the base mapping (Fix 1).
+          baseMappingPushed = true
           continue  // option handled (even if all were is_skip)
         }
       }
@@ -306,13 +314,17 @@ export function resolveWebhookItems(
       }
 
       // 3. Name fallback: exact normalized match against equipment names.
-      //    Uses full label ("Service / Option text") — not a partial/substring match.
-      const label = `${svc.service_name} / ${option.text}`
-      const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
-      if (equipmentId) {
-        resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
-        nameFallbacks.push({ optionName: label, optionId: option.id, equipmentId })
-        continue
+      //    Only runs when nothing has been resolved for this service yet —
+      //    once a modifier or base mapping fires, this fallback is suppressed
+      //    for all remaining options in the same service (Fix 1).
+      if (resolvedItems.length === resolvedCountBefore) {
+        const label = `${svc.service_name} / ${option.text}`
+        const equipmentId = equipmentByNormalizedName.get(normalizeForMatch(label))
+        if (equipmentId) {
+          resolvedItems.push({ item_id: equipmentId, qty: 1, is_sub_item: false, parent_item_id: null })
+          nameFallbacks.push({ optionName: label, optionId: option.id, equipmentId })
+          continue
+        }
       }
 
       // 4. No match — silently skip. Options like service fees, group size,
@@ -322,4 +334,21 @@ export function resolveWebhookItems(
   }
 
   return { chainId, resolvedItems, unmappedNames, nameFallbacks }
+}
+
+/**
+ * Merge duplicate item_id entries in a resolved items list by summing quantities.
+ * Safety net to prevent bad data if multiple mapping paths resolve the same item.
+ */
+export function deduplicateItems(items: ResolvedItem[]): ResolvedItem[] {
+  const map = new Map<string, ResolvedItem>()
+  for (const item of items) {
+    const existing = map.get(item.item_id)
+    if (existing) {
+      existing.qty += item.qty
+    } else {
+      map.set(item.item_id, { ...item })
+    }
+  }
+  return Array.from(map.values())
 }
