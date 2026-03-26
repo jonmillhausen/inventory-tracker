@@ -120,7 +120,7 @@ export async function GET(
     .join('\n')
 
   const eventTableRows = chainBookings
-    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${escapeHtml(b.start_time ?? '')}–${escapeHtml(b.end_time ?? '')}</td><td>${escapeHtml(b.event_type)}</td><td>${escapeHtml(b.address)}</td></tr>`)
+    .map(b => `<tr><td>${escapeHtml(b.customer_name)}</td><td>${fmt12(b.start_time)}–${fmt12(b.end_time)}</td><td>${escapeHtml(b.event_type)}</td><td>${escapeHtml(b.address)}</td></tr>`)
     .join('\n')
 
   const html = `<!DOCTYPE html>
@@ -166,6 +166,13 @@ export async function GET(
     status: 200,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   })
+}
+
+function fmt12(t: string | null | undefined): string {
+  if (!t) return '—'
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
 function escapeHtml(str: string): string {

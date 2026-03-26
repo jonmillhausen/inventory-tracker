@@ -19,6 +19,25 @@ export interface PackingListRow {
 const DROP_TYPES: EventType[] = ['dropoff', 'willcall']
 const COORD_TYPES: EventType[] = ['coordinated', 'pickup']
 
+// Tier multipliers for sub-item quantities based on parent equipment name slug.
+// Tier 1 (per 10): floor(qty/10), min 1
+// Tier 2 (per 20): floor(qty/20), min 1
+// Tier 3 (default): qty as-is
+const TIER1_SLUGS = new Set(['bubbleball', 'elite_laser_tag', 'arrow_tag'])
+const TIER2_SLUGS = new Set(['geltag', 'laser_tag_lite'])
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+}
+
+function getEffectiveParentQty(itemName: string, qty: number): number {
+  if (qty <= 0) return 0
+  const slug = slugify(itemName)
+  if (TIER1_SLUGS.has(slug)) return Math.max(1, Math.floor(qty / 10))
+  if (TIER2_SLUGS.has(slug)) return Math.max(1, Math.floor(qty / 20))
+  return qty
+}
+
 export function calculatePackingList(
   bookings: BookingRow[],
   bookingItems: BookingItemRow[],
@@ -58,8 +77,8 @@ export function calculatePackingList(
   // Step 5: Collect all parent item IDs with non-zero qty
   const allItemIds = new Set([...dropQtyMap.keys(), ...coordQtyMap.keys()])
 
-  // Step 6: Build equipment name lookup
-  const equipmentMap = new Map(equipment.map(e => [e.id, e.name]))
+  // Step 6: Build equipment lookup
+  const equipmentMap = new Map(equipment.map(e => [e.id, e]))
 
   // Step 7: Assemble parent item rows
   const rows: PackingListRow[] = []
@@ -68,7 +87,7 @@ export function calculatePackingList(
     const coordQty = coordQtyMap.get(itemId) ?? 0
     const qty = dropQty + coordQty
     if (qty <= 0) continue
-    const name = equipmentMap.get(itemId) ?? itemId
+    const name = equipmentMap.get(itemId)?.name ?? itemId
     rows.push({ itemId, name, qty, isSubItem: false, parentItemId: null })
   }
 
@@ -86,9 +105,10 @@ export function calculatePackingList(
   for (const link of subItemLinks) {
     const parentDropQty = dropQtyMap.get(link.parent_id) ?? 0
     const parentCoordQty = coordQtyMap.get(link.parent_id) ?? 0
+    const parentName = equipmentMap.get(link.parent_id)?.name ?? ''
 
-    const dropContrib = parentDropQty * link.loadout_qty
-    const coordContrib = parentCoordQty * link.loadout_qty
+    const dropContrib = getEffectiveParentQty(parentName, parentDropQty) * link.loadout_qty
+    const coordContrib = getEffectiveParentQty(parentName, parentCoordQty) * link.loadout_qty
 
     if (dropContrib > 0) {
       subDropQtyMap.set(link.sub_item_id, (subDropQtyMap.get(link.sub_item_id) ?? 0) + dropContrib)

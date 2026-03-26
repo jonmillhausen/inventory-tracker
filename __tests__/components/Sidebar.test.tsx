@@ -6,7 +6,7 @@ jest.mock('next/navigation', () => ({
   usePathname: () => '/availability',
 }))
 
-const TABS = ['Availability', 'Schedule', 'Bookings', 'Chain Loading', 'Equipment']
+const TABS = ['Availability', 'Schedule', '2-Week Audit', 'Bookings', 'Chain Loading', 'Equipment']
 
 describe('Sidebar — admin', () => {
   beforeEach(() => render(<Sidebar role="admin" />))

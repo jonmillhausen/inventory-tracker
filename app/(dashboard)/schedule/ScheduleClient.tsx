@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useMemo, useEffect, useCallback } from 'react'
+import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
 import { useBookings } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { useEquipment } from '@/lib/queries/equipment'
 import { isBookingActiveOnDate } from '@/lib/utils/availability'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Truck, MapPin, ExternalLink, X } from 'lucide-react'
+import { Truck, MapPin, ExternalLink, X, Clock } from 'lucide-react'
 import type { Database } from '@/lib/types/database.types'
 import type { BookingsData } from '@/lib/queries/bookings'
 
@@ -104,8 +105,7 @@ async function fetchTravelInfo(from: string, to: string, date: string, time: str
 }
 
 export function ScheduleClient({ initialData, initialChains, initialEquipment }: Props) {
-  const today = new Date().toISOString().split('T')[0]
-  const [selectedDate, setSelectedDate] = useState(today)
+  const [selectedDate, setSelectedDate] = usePersistedDate('date:schedule')
   const [showTravel, setShowTravel] = useState(true)
   const [showSetup, setShowSetup] = useState(true)
   const [popupId, setPopupId] = useState<string | null>(null)
@@ -215,6 +215,29 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     return travelTimes.get(`${from}::${to}`) ?? { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
   }
 
+  // Map: colId → Set of booking IDs that overlap with the previous event in that column
+  const columnOverlaps = useMemo(() => {
+    const result = new Map<string, Set<string>>()
+    for (const col of columns) {
+      const evts = col.bookings
+      const overlapping = new Set<string>()
+      for (let i = 1; i < evts.length; i++) {
+        const prev = evts[i - 1]
+        const curr = evts[i]
+        const prevSeqEnd = timeToMin(prev.end_time) + getSetup(prev, bookingItems, equipmentMap).after
+        const fromAddr = prev.address ?? BASE_ADDRESS
+        const toAddr = curr.address ?? ''
+        const travel = toAddr ? getTravelInfo(fromAddr, toAddr).minutes : FALLBACK_TRAVEL_MIN
+        const currNeedsDepartBy = timeToMin(curr.start_time) - getSetup(curr, bookingItems, equipmentMap).before - travel
+        if (currNeedsDepartBy < prevSeqEnd) {
+          overlapping.add(curr.id)
+        }
+      }
+      if (overlapping.size > 0) result.set(col.id, overlapping)
+    }
+    return result
+  }, [columns, travelTimes, bookingItems, equipmentMap])
+
   const colWidth = Math.max(120, 900 / Math.max(columns.length, 1))
   const gridWidth = 50 + colWidth * columns.length
 
@@ -233,6 +256,12 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
               value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
             />
+            <button
+              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+              className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Today
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-4">
@@ -275,19 +304,29 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
             <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500">
               Time
             </div>
-            {columns.map(col => (
-              <div
-                key={col.id}
-                className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center"
-              >
-                <span
-                  className="inline-block px-2 py-0.5 rounded text-xs font-bold"
-                  style={{ backgroundColor: col.color + '33', color: col.color, border: `1px solid ${col.color}66` }}
+            {columns.map(col => {
+              const hasOverlap = columnOverlaps.has(col.id)
+              return (
+                <div
+                  key={col.id}
+                  className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center"
                 >
-                  {col.name}
-                </span>
-              </div>
-            ))}
+                  <div className="flex items-center justify-center gap-1">
+                    <span
+                      className="inline-block px-2 py-0.5 rounded text-xs font-bold"
+                      style={{ backgroundColor: col.color + '33', color: col.color, border: `1px solid ${col.color}66` }}
+                    >
+                      {col.name}
+                    </span>
+                    {hasOverlap && (
+                      <span title="Schedule overlap detected">
+                        <Clock size={11} className="text-red-500 flex-shrink-0" />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
 
             {/* Time label column */}
             <div className="relative border-r border-gray-100" style={{ height: TOTAL_PX }}>
@@ -337,6 +376,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                     const travelInfo = toAddr ? getTravelInfo(fromAddr, toAddr) : { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
                     const isLast = bi === evts.length - 1
                     const isOpen = popupId === booking.id
+                    const isOverlapping = columnOverlaps.get(col.id)?.has(booking.id) ?? false
 
                     // Return travel info (last event → base)
                     const returnInfo = isLast && toAddr
@@ -399,8 +439,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                           style={{
                             top: yPos(s),
                             height: eventHeight,
-                            backgroundColor: col.color + '33',
-                            border: `2px solid ${col.color}`,
+                            backgroundColor: isOverlapping ? '#fee2e2' : col.color + '33',
+                            border: `2px solid ${isOverlapping ? '#ef4444' : col.color}`,
                             padding: '2px 4px',
                             fontSize: 9,
                           }}

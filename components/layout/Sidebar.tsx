@@ -9,6 +9,7 @@ import type { UserRole } from '@/lib/types/database.types'
 const NAV_ITEMS = [
   { label: 'Availability', href: '/availability' },
   { label: 'Schedule', href: '/schedule' },
+  { label: '2-Week Audit', href: '/audit' },
   { label: 'Bookings', href: '/bookings' },
   { label: 'Chain Loading', href: '/chains' },
   { label: 'Equipment', href: '/equipment' },

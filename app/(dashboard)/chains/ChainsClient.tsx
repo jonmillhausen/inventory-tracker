@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
 import { useBookings } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { useEquipment, useEquipmentSubItems, useSubItemLinks } from '@/lib/queries/equipment'
@@ -251,8 +252,6 @@ function isLightColor(hex: string): boolean {
 }
 
 export function ChainsClient({ initialChains, initialData, initialEquipment, initialSubItems, initialSubItemLinks }: Props) {
-  const today = new Date().toISOString().split('T')[0]
-
   const { data: chains = [] } = useChains(initialChains)
   const { data } = useBookings(initialData)
   const { data: equipment = [] } = useEquipment(initialEquipment)
@@ -260,7 +259,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
 
   const [selectedChain, setSelectedChain] = useState<'all' | string>('all')
-  const [selectedDate, setSelectedDate] = useState(today)
+  const [selectedDate, setSelectedDate] = usePersistedDate('date:chains')
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set())
   const [printingChain, setPrintingChain] = useState<string | null>(null)
@@ -377,6 +376,15 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
                 setCheckedItems(new Set())
               }}
             />
+            <button
+              onClick={() => {
+                setSelectedDate(new Date().toISOString().split('T')[0])
+                setCheckedItems(new Set())
+              }}
+              className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              Today
+            </button>
           </div>
         </div>
         <Button

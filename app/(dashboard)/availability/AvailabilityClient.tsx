@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react'
 import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
+import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
 import {
   calculateAvailability,
   computeChainTimes,
@@ -25,10 +26,6 @@ interface Props {
   initialSubItems: SubItemRow[]
   initialBookings: BookingsData
   initialChains: ChainRow[]
-}
-
-function today() {
-  return new Date().toISOString().split('T')[0]
 }
 
 function chainLabel(name: string): string {
@@ -130,7 +127,7 @@ export function AvailabilityClient({
   initialBookings,
   initialChains,
 }: Props) {
-  const [selectedDate, setSelectedDate] = useState(today())
+  const [selectedDate, setSelectedDate] = usePersistedDate('date:availability')
   const [search, setSearch] = useState('')
   const [openChainPop, setOpenChainPop] = useState<string | null>(null)
 
@@ -188,6 +185,12 @@ export function AvailabilityClient({
           onChange={e => setSelectedDate(e.target.value)}
           className="border rounded px-2 py-1 text-sm"
         />
+        <button
+          onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+          className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+        >
+          Today
+        </button>
       </div>
 
       {/* Stat cards */}
