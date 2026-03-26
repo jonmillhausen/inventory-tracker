@@ -27,12 +27,19 @@ interface V1ServiceField {
   selected_options?: V1Option[]
 }
 
+interface V1PricingSummaryItem {
+  type?: string       // 'service_option' | 'custom_price' | 'base_price' | etc.
+  amount?: number
+  description?: string
+}
+
 interface V1Service {
   service_id?: string
   service_name?: string
   name?: string              // fallback if service_name absent
   service_fields?: V1ServiceField[]        // v1
   service_selections?: Array<{ selected_options?: V1Option[] }> // v3 fallback
+  pricing_summary?: V1PricingSummaryItem[] // v1: option summary when service_fields is absent
 }
 
 interface V1Job {
@@ -143,10 +150,13 @@ function parseV1Job(job: V1Job): ParsedJob {
   // Normalize v1 services to the ZenbookerService shape resolveWebhookItems expects.
   // v1 uses service_fields[].selected_options[] instead of service_selections[].selected_options[].
   // v1 options may use "name" instead of "text" for the label.
-  const services: ZenbookerService[] = (job.services ?? []).map(svc => ({
-    service_id:   svc.service_id ?? '',
-    service_name: svc.service_name ?? svc.name ?? '',
-    service_selections: (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
+  //
+  // Fallback: when service_fields is absent or empty, some v1 services surface
+  // selected options only in pricing_summary[]. Parse "Nx Description" entries
+  // from there as synthetic options with id='' — resolveWebhookItems handles
+  // them via name-based modifier matching instead of ID-based matching.
+  const services: ZenbookerService[] = (job.services ?? []).map(svc => {
+    const sfSelections = (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
       selected_options: (field.selected_options ?? []).map(opt => ({
         id:       opt.id ?? '',
         text:     opt.text ?? opt.name ?? '',
@@ -154,8 +164,37 @@ function parseV1Job(job: V1Job): ParsedJob {
         quantity: opt.quantity !== undefined ? Number(opt.quantity) : undefined,
         price:    opt.price !== undefined ? Number(opt.price) : undefined,
       })),
-    })),
-  }))
+    }))
+
+    const hasRealOptions = sfSelections.some(sel => (sel.selected_options?.length ?? 0) > 0)
+
+    // Only extract pricing_summary when no real options were found via service_fields.
+    // This avoids double-counting on services that have both sources.
+    const psSelections =
+      !hasRealOptions && (svc.pricing_summary?.length ?? 0) > 0
+        ? [{
+            selected_options: (svc.pricing_summary ?? [])
+              .filter(ps => ps.type === 'service_option' && ps.description)
+              .map(ps => {
+                const desc = ps.description!
+                // Parse optional "Nx " prefix (e.g. "3x Standard Cornhole" → qty=3, text="Standard Cornhole")
+                const qtyMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
+                return {
+                  id:       '',   // synthetic — no Zenbooker modifier ID
+                  text:     qtyMatch ? qtyMatch[2].trim() : desc,
+                  quantity: qtyMatch ? parseInt(qtyMatch[1], 10) : 1,
+                  price:    ps.amount !== undefined ? Number(ps.amount) : undefined,
+                }
+              }),
+          }]
+        : []
+
+    return {
+      service_id:         svc.service_id ?? '',
+      service_name:       svc.service_name ?? svc.name ?? '',
+      service_selections: [...sfSelections, ...psSelections],
+    }
+  })
 
   // Staff/chain assignment — handle multiple possible field names in v1
   let assignedStaff: Array<{ staff_id: string; staff_name: string }> = []

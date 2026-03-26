@@ -256,6 +256,35 @@ export function resolveWebhookItems(
         continue  // option handled by modifier rows (even if all were is_skip)
       }
 
+      // 1.5. Name-based modifier match — used for v1 pricing_summary synthetic
+      //      options (id = ''). These carry no Zenbooker modifier ID, so ID lookup
+      //      above always misses. Match option.text against zenbooker_modifier_name
+      //      using a normalized substring check (e.g. "Standard Cornhole" matches
+      //      modifier_name "Cornhole"; "BattlePutt Golf" matches "BattlePutt").
+      //      Always uses the quantity parsed from the "Nx" description prefix.
+      if (option.id === '') {
+        const normText = normalizeForMatch(option.text)
+        const nameMatchMappings = serviceMappings.filter(
+          m =>
+            m.zenbooker_service_id === svc.service_id &&
+            m.zenbooker_modifier_id !== null &&
+            m.zenbooker_modifier_name !== null &&
+            normText.includes(normalizeForMatch(m.zenbooker_modifier_name))
+        )
+        if (nameMatchMappings.length > 0) {
+          for (const mm of nameMatchMappings) {
+            if (mm.is_skip) continue
+            if (!mm.item_id) continue
+            // Use the parsed quantity from the description prefix when available.
+            const qty = (option.quantity !== undefined && option.quantity > 0)
+              ? option.quantity
+              : mm.default_qty
+            resolvedItems.push({ item_id: mm.item_id, qty, is_sub_item: false, parent_item_id: null })
+          }
+          continue  // option handled (even if all were is_skip)
+        }
+      }
+
       // 2. Base mapping fallback: push ALL base rows, but only ONCE per service.
       //    Multiple unmatched options (duration, group size, logistics) must not
       //    each trigger a separate base insert.
