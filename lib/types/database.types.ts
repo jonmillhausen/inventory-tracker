@@ -34,6 +34,7 @@ export interface Database {
           is_active: boolean
           custom_setup_min: number | null
           custom_cleanup_min: number | null
+          categories: string[]
           created_at: string
           updated_at: string
         }
@@ -44,6 +45,7 @@ export interface Database {
           is_active?: boolean
           custom_setup_min?: number | null
           custom_cleanup_min?: number | null
+          categories?: string[]
         }
         Update: Partial<{
           name: string
@@ -51,6 +53,7 @@ export interface Database {
           is_active: boolean
           custom_setup_min: number | null
           custom_cleanup_min: number | null
+          categories: string[]
         }>
         Relationships: []
       }

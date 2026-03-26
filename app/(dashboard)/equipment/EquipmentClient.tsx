@@ -10,7 +10,7 @@ import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
 import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
 import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, Flag, X } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
@@ -40,9 +40,17 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
+  const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
 
-  // Active primary equipment only
+  // All active primary equipment (for modals)
   const activeEquipment = useMemo(() => equipment.filter(e => e.is_active), [equipment])
+
+  // Filtered equipment for table display
+  const filteredEquipment = useMemo(() => {
+    if (equipmentFilter === 'damaged') return activeEquipment.filter(e => e.out_of_service >= 1)
+    if (equipmentFilter === 'flags') return activeEquipment.filter(e => e.issue_flag >= 1)
+    return activeEquipment
+  }, [activeEquipment, equipmentFilter])
 
   // Map sub-items by id
   const subItemMap = useMemo(() => new Map(subItems.map(s => [s.id, s])), [subItems])
@@ -63,6 +71,18 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
     }
     return map
   }, [subItemLinks, subItemMap])
+
+  // Per-parent: whether any linked sub-item has flags or damage
+  const subStatusByParent = useMemo(() => {
+    const result = new Map<string, { hasFlags: boolean; hasDamage: boolean }>()
+    for (const [parentId, subs] of linksByParent) {
+      result.set(parentId, {
+        hasFlags: subs.some(({ sub }) => sub.issue_flag > 0),
+        hasDamage: subs.some(({ sub }) => sub.out_of_service > 0),
+      })
+    }
+    return result
+  }, [linksByParent])
 
   // Existing links for a specific sub-item (for edit pre-fill)
   const linksBySubItem = useMemo(() => {
@@ -86,12 +106,34 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Equipment</h1>
+      {/* Header with filter buttons */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl font-semibold">Equipment</h1>
+          {/* Filter buttons */}
+          <div className="flex gap-1.5">
+            {(['all', 'damaged', 'flags'] as const).map(f => {
+              const labels = { all: 'All Equipment', damaged: 'Damaged Only', flags: 'Flags Only' }
+              return (
+                <button
+                  key={f}
+                  onClick={() => setEquipmentFilter(f)}
+                  className={`px-3 py-1 text-sm rounded-md border font-medium transition-colors ${
+                    equipmentFilter === f
+                      ? 'bg-gray-900 text-white border-gray-900'
+                      : 'bg-white text-gray-900 border-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  {labels[f]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
         {canAdmin(role) && (
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => setAddingType('primary')}>+ Primary Equipment</Button>
-            <Button size="sm" variant="outline" onClick={() => setAddingType('sub_item')}>+ Sub-Item</Button>
+            <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={() => setAddingType('primary')}>+ Primary Equipment</Button>
+            <Button size="sm" variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50" onClick={() => setAddingType('sub_item')}>+ Sub-Item</Button>
           </div>
         )}
       </div>
@@ -103,15 +145,26 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
               <th className="px-4 py-3 font-medium text-center">Loadout</th>
-              <th className="px-4 py-3 font-medium text-center">OOS</th>
-              <th className="px-4 py-3 font-medium text-center">Flags</th>
+              <th className="px-4 py-3 font-medium text-center">
+                <span className="inline-flex items-center gap-1 justify-center">
+                  <X size={13} className="text-red-500" />
+                  Damaged
+                </span>
+              </th>
+              <th className="px-4 py-3 font-medium text-center">
+                <span className="inline-flex items-center gap-1 justify-center">
+                  <Flag size={13} className="text-orange-500" />
+                  Flags
+                </span>
+              </th>
               <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {activeEquipment.map(e => {
+            {filteredEquipment.map(e => {
               const subs = linksByParent.get(e.id) ?? []
               const isExpanded = expandedParents.has(e.id)
+              const subStatus = subStatusByParent.get(e.id)
 
               return (
                 <React.Fragment key={e.id}>
@@ -125,6 +178,8 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     <td className="px-4 py-3 text-center">
                       {e.out_of_service > 0 ? (
                         <Badge variant="destructive">{e.out_of_service}</Badge>
+                      ) : (!isExpanded && subStatus?.hasDamage) ? (
+                        <X size={14} className="text-red-400 mx-auto" />
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -134,6 +189,8 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                             {e.issue_flag}
                           </Badge>
                         </button>
+                      ) : (!isExpanded && subStatus?.hasFlags) ? (
+                        <Flag size={14} className="text-orange-400 mx-auto" />
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -148,7 +205,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           <>
                             <Button size="sm" variant="outline"
                               onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}>
-                              OOS
+                              Damaged
                             </Button>
                             <Button size="sm" variant="outline"
                               onClick={() => setEditEquipment(e)}>
@@ -207,7 +264,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                             <>
                               <Button size="sm" variant="outline" className="h-6 text-xs"
                                 onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
-                                OOS
+                                Damaged
                               </Button>
                               <Button size="sm" variant="outline" className="h-6 text-xs"
                                 onClick={() => setEditSubItem(sub)}>

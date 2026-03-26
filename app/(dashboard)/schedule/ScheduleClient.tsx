@@ -299,7 +299,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
           No events scheduled for this date
         </div>
       ) : (
-        <div className="rounded-md border bg-white overflow-auto">
+        <div className="rounded-md border bg-white overflow-auto" style={{ maxHeight: 'calc(100vh - 190px)' }}>
           <div style={{ minWidth: gridWidth, display: 'grid', gridTemplateColumns: `50px repeat(${columns.length}, 1fr)` }}>
             {/* Header row — sticky */}
             <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500 sticky top-0 z-20">

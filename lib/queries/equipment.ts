@@ -66,7 +66,7 @@ export function useSubItemLinks(initialData?: SubItemLinkRow[]) {
 export function useCreateEquipment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: { id: string; name: string; total_qty: number; custom_setup_min?: number | null; custom_cleanup_min?: number | null }) => {
+    mutationFn: async (body: { id: string; name: string; total_qty: number; custom_setup_min?: number | null; custom_cleanup_min?: number | null; categories?: string[] }) => {
       const res = await fetch('/api/equipment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,7 +82,7 @@ export function useCreateEquipment() {
 export function useUpdateEquipment() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: { id: string; name?: string; total_qty?: number; is_active?: boolean; custom_setup_min?: number | null; custom_cleanup_min?: number | null }) => {
+    mutationFn: async ({ id, ...body }: { id: string; name?: string; total_qty?: number; is_active?: boolean; custom_setup_min?: number | null; custom_cleanup_min?: number | null; categories?: string[] }) => {
       const res = await fetch(`/api/equipment/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

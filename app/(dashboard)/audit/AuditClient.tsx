@@ -58,10 +58,10 @@ function isLightColor(hex: string): boolean {
 interface DayCell {
   date: string
   eventCount: number
-  chainIds: string[]           // unique chain IDs with bookings
-  hasUnassigned: boolean
-  isOverbooked: boolean        // any equipment remaining < 0
-  hasOverlap: boolean          // any booking sequence overlaps with 30-min fallback travel
+  chainCounts: Array<{ chainId: string; count: number }>
+  unassignedCount: number
+  isOverbooked: boolean
+  hasOverlap: boolean
 }
 
 function computeDayCell(
@@ -74,8 +74,12 @@ function computeDayCell(
   const active = bookings.filter(b => isBookingActiveOnDate(b, date))
   const eventCount = active.length
 
-  const chainIds = [...new Set(active.filter(b => b.chain).map(b => b.chain!))]
-  const hasUnassigned = active.some(b => !b.chain)
+  const chainCountMap = new Map<string, number>()
+  for (const b of active) {
+    if (b.chain) chainCountMap.set(b.chain, (chainCountMap.get(b.chain) ?? 0) + 1)
+  }
+  const chainCounts = Array.from(chainCountMap.entries()).map(([chainId, count]) => ({ chainId, count }))
+  const unassignedCount = active.filter(b => !b.chain).length
 
   // Overbooking: use calculateAvailability (no sub-items needed for overbooking check)
   const rows = calculateAvailability(equipment, [], bookings, bookingItems, date)
@@ -102,7 +106,7 @@ function computeDayCell(
     if (hasOverlap) break
   }
 
-  return { date, eventCount, chainIds, hasUnassigned, isOverbooked, hasOverlap }
+  return { date, eventCount, chainCounts, unassignedCount, isOverbooked, hasOverlap }
 }
 
 export function AuditClient({ initialData, initialChains, initialEquipment }: Props) {
@@ -146,57 +150,59 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
   }
 
   function renderCell(cell: DayCell, isToday: boolean) {
-    const chainObjs = cell.chainIds.map(id => chainMap.get(id)).filter(Boolean) as ChainRow[]
-
     return (
       <div
         key={cell.date}
         onClick={() => handleCellClick(cell.date)}
         className={`
-          border rounded-lg p-2.5 cursor-pointer transition-colors min-h-[110px]
+          border rounded-lg p-2.5 cursor-pointer transition-colors min-h-[140px]
           ${isToday ? 'border-blue-400 bg-blue-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'}
         `}
       >
-        <div className="text-sm font-semibold text-gray-700 mb-1">{formatDayMonth(cell.date)}</div>
+        {/* Date label */}
+        <div className="text-base font-bold text-gray-800 mb-1">{formatDayMonth(cell.date)}</div>
 
         {cell.eventCount === 0 ? (
           <div className="text-xs text-gray-300 mt-2">No events</div>
         ) : (
           <>
-            <div className="text-sm text-gray-500 mb-1.5">
+            {/* Total event count */}
+            <div className="text-sm font-bold text-gray-700 mb-2">
               {cell.eventCount} event{cell.eventCount !== 1 ? 's' : ''}
             </div>
 
-            {/* Chain circles */}
-            {chainObjs.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-1.5">
-                {chainObjs.map(c => (
+            {/* Chain list — vertical */}
+            <div className="space-y-0.5 mb-2">
+              {cell.chainCounts.map(({ chainId, count }) => {
+                const c = chainMap.get(chainId)
+                if (!c) return null
+                return (
+                  <div key={chainId} className="flex items-center gap-1.5 text-xs">
+                    <span
+                      className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5 shrink-0"
+                      style={{ backgroundColor: c.color, color: isLightColor(c.color) ? '#1e293b' : '#fff' }}
+                    >
+                      {c.name === 'Will Call' ? 'WC' : c.name.replace(/\D/g, '').slice(0, 2) || c.name[0]}
+                    </span>
+                    <span className="text-gray-500">— {count} event{count !== 1 ? 's' : ''}</span>
+                  </div>
+                )
+              })}
+              {cell.unassignedCount > 0 && (
+                <div className="flex items-center gap-1.5 text-xs">
                   <span
-                    key={c.id}
-                    className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5"
-                    style={{
-                      backgroundColor: c.color,
-                      color: isLightColor(c.color) ? '#1e293b' : '#fff',
-                    }}
-                    title={c.name}
-                  >
-                    {c.name === 'Will Call' ? 'W' : c.name.replace(/\D/g, '').slice(0, 2) || c.name[0]}
-                  </span>
-                ))}
-                {cell.hasUnassigned && (
-                  <span
-                    className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5"
+                    className="inline-flex items-center justify-center rounded-full text-[9px] font-bold w-5 h-5 shrink-0"
                     style={{ backgroundColor: '#9ca3af', color: '#fff' }}
-                    title="Unassigned"
                   >
                     U
                   </span>
-                )}
-              </div>
-            )}
+                  <span className="text-gray-500">— {cell.unassignedCount} event{cell.unassignedCount !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+            </div>
 
-            {/* Warning icons — 2× original size */}
-            <div className="flex gap-1.5 mt-1">
+            {/* Warning icons */}
+            <div className="flex gap-1.5">
               {cell.isOverbooked && (
                 <span title="Equipment overbooked">
                   <AlertTriangle size={22} className="text-red-500" />
@@ -207,7 +213,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
                   <Clock size={22} className="text-orange-500" />
                 </span>
               )}
-              {cell.hasUnassigned && (
+              {cell.unassignedCount > 0 && (
                 <span title="Unassigned events">
                   <CircleHelp size={22} className="text-gray-400" />
                 </span>
@@ -234,10 +240,11 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
       </div>
 
       {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-500">
-        <span className="flex items-center gap-1"><AlertTriangle size={13} className="text-red-500" /> Overbooked</span>
-        <span className="flex items-center gap-1"><Clock size={13} className="text-orange-500" /> Overlap</span>
-        <span className="flex items-center gap-1"><CircleHelp size={13} className="text-gray-400" /> Unassigned</span>
+      <div className="flex items-center gap-5">
+        <span className="text-sm font-semibold text-gray-600">KEY:</span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><AlertTriangle size={26} className="text-red-500" /> Overbooked</span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><Clock size={26} className="text-orange-500" /> Overlap</span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><CircleHelp size={26} className="text-gray-400" /> Unassigned</span>
       </div>
 
       {/* Week 1 */}

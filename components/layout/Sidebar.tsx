@@ -22,9 +22,9 @@ const NAV_ITEMS = [
   { label: 'Availability',  href: '/availability', icon: CalendarDays },
   { label: 'Schedule',      href: '/schedule',      icon: Clock        },
   { label: '2-Week Audit',  href: '/audit',         icon: Search       },
-  { label: 'Bookings',      href: '/bookings',      icon: CheckSquare  },
   { label: 'Chain Loading', href: '/chains',        icon: Truck        },
   { label: 'Equipment',     href: '/equipment',     icon: Package      },
+  { label: 'Bookings',      href: '/bookings',      icon: CheckSquare  },
 ] as const
 
 interface SidebarProps {

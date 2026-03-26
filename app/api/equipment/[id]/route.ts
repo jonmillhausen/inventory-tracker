@@ -14,12 +14,12 @@ export async function PATCH(
 
   const { id } = await params
   const body = await request.json()
-  const { name, total_qty, is_active, custom_setup_min, custom_cleanup_min } = body
+  const { name, total_qty, is_active, custom_setup_min, custom_cleanup_min, categories } = body
 
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('equipment')
-    .update({ name, total_qty, is_active, custom_setup_min, custom_cleanup_min })
+    .update({ name, total_qty, is_active, custom_setup_min, custom_cleanup_min, ...(categories !== undefined ? { categories } : {}) })
     .eq('id', id)
     .select()
     .single()

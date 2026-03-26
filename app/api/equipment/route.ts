@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth
 
   const body = await request.json()
-  const { id, name, total_qty, custom_setup_min = null, custom_cleanup_min = null } = body
+  const { id, name, total_qty, custom_setup_min = null, custom_cleanup_min = null, categories = [] } = body
 
   if (!id || !name || total_qty == null) {
     return NextResponse.json({ error: 'id, name, and total_qty are required' }, { status: 400 })
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('equipment')
-    .insert({ id, name, total_qty, custom_setup_min, custom_cleanup_min })
+    .insert({ id, name, total_qty, custom_setup_min, custom_cleanup_min, categories })
     .select()
     .single()
 

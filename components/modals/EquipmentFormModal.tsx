@@ -22,7 +22,14 @@ export function EquipmentFormModal({ item, onClose }: Props) {
   const [totalQty, setTotalQty] = useState(item?.total_qty ?? 1)
   const [setupMin, setSetupMin] = useState<string>(item?.custom_setup_min?.toString() ?? '')
   const [cleanupMin, setCleanupMin] = useState<string>(item?.custom_cleanup_min?.toString() ?? '')
+  const [categories, setCategories] = useState<string[]>(item?.categories ?? [])
   const [error, setError] = useState<string | null>(null)
+
+  function toggleCategory(cat: string) {
+    setCategories(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    )
+  }
 
   const create = useCreateEquipment()
   const update = useUpdateEquipment()
@@ -39,6 +46,7 @@ export function EquipmentFormModal({ item, onClose }: Props) {
           total_qty: totalQty,
           custom_setup_min: setupMin ? Number(setupMin) : null,
           custom_cleanup_min: cleanupMin ? Number(cleanupMin) : null,
+          categories,
         })
       } else {
         await create.mutateAsync({
@@ -47,6 +55,7 @@ export function EquipmentFormModal({ item, onClose }: Props) {
           total_qty: totalQty,
           custom_setup_min: setupMin ? Number(setupMin) : null,
           custom_cleanup_min: cleanupMin ? Number(cleanupMin) : null,
+          categories,
         })
       }
       onClose()
@@ -89,6 +98,22 @@ export function EquipmentFormModal({ item, onClose }: Props) {
               <Label htmlFor="cleanup">Cleanup min (optional)</Label>
               <Input id="cleanup" type="number" min={0} value={cleanupMin}
                 onChange={e => setCleanupMin(e.target.value)} placeholder="45" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Categories</Label>
+            <div className="flex flex-wrap gap-2">
+              {['Premium', 'Inflatable', 'Specialty', 'GameTruck', 'Lawn Game'].map(cat => (
+                <label key={cat} className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={categories.includes(cat)}
+                    onChange={() => toggleCategory(cat)}
+                    className="accent-blue-500"
+                  />
+                  <span className="text-sm">{cat}</span>
+                </label>
+              ))}
             </div>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}

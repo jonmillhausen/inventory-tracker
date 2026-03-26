@@ -20,6 +20,7 @@ const makeEquipment = (overrides: Partial<EquipmentRow> = {}): EquipmentRow => (
   is_active: true,
   custom_setup_min: null,
   custom_cleanup_min: null,
+  categories: [],
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   ...overrides,

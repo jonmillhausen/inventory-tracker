@@ -239,7 +239,7 @@ export function AvailabilityClient({
               : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
           }`}
         >
-          Booked Only
+          {bookedOnly ? 'Show All Equipment' : 'Show Booked Only'}
         </button>
       </div>
 
