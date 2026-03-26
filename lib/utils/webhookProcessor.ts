@@ -69,6 +69,9 @@ export const DELIVERY_SERVICES = new Set([
  * Determine event_type from the services list and customer name.
  */
 export function resolveEventType(services: ZenbookerService[], customerName: string): EventType {
+  // Internal fleet events — checked before delivery-service logic
+  if (customerName === 'Wonderfly Arena Return') return 'arena_pickup'
+
   const allDelivery = services.length > 0 && services.every(svc => DELIVERY_SERVICES.has(svc.service_name))
   if (!allDelivery) return 'coordinated'
   if (customerName === 'Wonderfly Games Pickup') return 'pickup'

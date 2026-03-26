@@ -73,6 +73,30 @@ interface V1Response {
   next_cursor: string | null
 }
 
+// ── Service classification constants ──────────────────────────────────────
+
+// v1 service_ids (different from v3)
+const LASER_TAG_V1_SERVICE_ID    = '1747883952074x309158420488483400'
+const LAWN_GAMES_V1_SERVICE_ID   = '1751332967401x820543194421858200'
+const OBSTACLE_COURSE_V1_SERVICE_ID = '1749611522093x499322152628127740'
+
+// Internal admin entries — jobs whose ONLY services are these are skipped entirely.
+// Individual services with these names are filtered out before item resolution.
+const ADMIN_SERVICE_NAMES = new Set([
+  'booking adj',
+  'large van unavailable',
+  'late night surcharge',
+])
+
+// Promo event service name substrings — any match routes to synthetic 'v1:promo_event'
+// which maps to the promo_supplies equipment item in service_mappings.
+const PROMO_SERVICE_PATTERNS = [
+  'promo event',
+  'promo booth',
+  'tailgoat promo',
+  'polar plunge promo',
+]
+
 // ── Time helpers ──────────────────────────────────────────────────────────
 
 /**
@@ -115,6 +139,8 @@ interface ParsedJob {
   services: ZenbookerService[]
   assignedStaff: Array<{ staff_id: string; staff_name: string }>
   notes: string
+  /** True when all services were admin-only entries and no booking should be created. */
+  isAdminOnly: boolean
 }
 
 function parseV1Job(job: V1Job): ParsedJob {
@@ -148,15 +174,92 @@ function parseV1Job(job: V1Job): ParsedJob {
     endTime = calcEndTime(startTime, job.estimated_duration_seconds)
   }
 
-  // Normalize v1 services to the ZenbookerService shape resolveWebhookItems expects.
-  // v1 uses service_fields[].selected_options[] instead of service_selections[].selected_options[].
-  // v1 options may use "name" instead of "text" for the label.
-  //
-  // Fallback: when service_fields is absent or empty, some v1 services surface
-  // selected options only in pricing_summary[]. Parse "Nx Description" entries
-  // from there as synthetic options with id='' — resolveWebhookItems handles
-  // them via name-based modifier matching instead of ID-based matching.
-  const services: ZenbookerService[] = (job.services ?? []).map(svc => {
+  // ── Service normalization ──────────────────────────────────────────────
+  // Each service is handled in a priority order before the generic path:
+  //   1. Admin services  → filtered out (item 6)
+  //   2. Promo events    → synthetic 'v1:promo_event' service_id (item 5)
+  //   3. Gaga Pit        → synthetic 'v1:gaga_pit' service_id (item 11)
+  //   4. Laser Tag v1    → synthetic modifier options for Elite / Lite variant (items 1+2)
+  //   5. Lawn Games v1   → skip if no priced options (item 3)
+  //   6. Generic path    → service_fields options + pricing_summary fallback
+
+  let hadServices = false   // at least one non-admin service existed in the payload
+  const services: ZenbookerService[] = []
+
+  for (const svc of job.services ?? []) {
+    const svcName = svc.service_name ?? svc.name ?? ''
+    const nameLower = svcName.toLowerCase()
+
+    // 1. Admin-only entries — filter silently (item 6)
+    if (ADMIN_SERVICE_NAMES.has(nameLower)) continue
+
+    hadServices = true
+
+    // 2. Promo events → synthetic service_id (item 5)
+    if (PROMO_SERVICE_PATTERNS.some(p => nameLower.includes(p))) {
+      services.push({
+        service_id:         'v1:promo_event',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 3. Gaga Pit → synthetic service_id (item 11)
+    // TODO: replace 'v1:gaga_pit' with the actual service_id once confirmed via:
+    //   SELECT raw_payload->'services' FROM webhook_logs
+    //   WHERE action = 'job.import' AND result_detail LIKE '%unmapped: Gaga%' LIMIT 1;
+    if (nameLower.includes('gaga')) {
+      services.push({
+        service_id:         'v1:gaga_pit',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 4. Laser Tag v1 — emit synthetic modifier options for Elite vs Lite (items 1+2)
+    //    The v1 API surfaces the tagger variant and customer quantity only in
+    //    pricing_summary (e.g. "12x Elite Laser Tag" or "12x Laser Tag Lite (ages 5+)").
+    //    We map each to a synthetic modifier_id that has a service_mapping row in the DB.
+    if (svc.service_id === LASER_TAG_V1_SERVICE_ID) {
+      const syntheticOptions: Array<{ id: string; text: string; quantity: number }> = []
+      for (const ps of svc.pricing_summary ?? []) {
+        if (ps.type !== 'service_option' || !ps.description || (ps.amount ?? 0) <= 0) continue
+        const desc = ps.description
+        const qtyMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
+        const qty  = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+        const text = qtyMatch ? qtyMatch[2].trim() : desc
+        const tl   = text.toLowerCase()
+
+        if (tl.includes('elite laser tag')) {
+          syntheticOptions.push({ id: 'v1_lt_elite', text, quantity: qty })
+        } else if (tl.includes('laser tag lite')) {
+          syntheticOptions.push({ id: 'v1_lt_lite',  text, quantity: qty })
+        }
+      }
+      if (syntheticOptions.length > 0) {
+        services.push({
+          service_id:         svc.service_id,
+          service_name:       svcName,
+          service_selections: [{ selected_options: syntheticOptions }],
+        })
+      }
+      continue
+    }
+
+    // 5. Lawn Games — skip if service has no priced selections (item 3)
+    //    Blank Lawn Games services are sometimes added by reps as event annotations.
+    if (svc.service_id === LAWN_GAMES_V1_SERVICE_ID) {
+      const hasPricedSummary = (svc.pricing_summary ?? [])
+        .some(ps => ps.type === 'service_option' && (ps.amount ?? 0) > 0)
+      const hasFieldOptions = (svc.service_fields ?? svc.service_selections ?? [])
+        .some(f => (f.selected_options?.length ?? 0) > 0)
+      if (!hasPricedSummary && !hasFieldOptions) continue
+    }
+
+    // 6. Generic path
+    // Build selections from service_fields (v1) or service_selections (v3 fallback).
     const sfSelections = (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
       selected_options: (field.selected_options ?? []).map(opt => ({
         id:       opt.id ?? '',
@@ -169,8 +272,10 @@ function parseV1Job(job: V1Job): ParsedJob {
 
     const hasRealOptions = sfSelections.some(sel => (sel.selected_options?.length ?? 0) > 0)
 
-    // Only extract pricing_summary when no real options were found via service_fields.
-    // This avoids double-counting on services that have both sources.
+    // Fallback: when service_fields is absent or empty, some v1 services surface
+    // selected options only in pricing_summary[]. Parse "Nx Description" entries
+    // from there as synthetic options with id='' — resolveWebhookItems handles
+    // them via name-based modifier matching instead of ID-based matching.
     const psSelections =
       !hasRealOptions && (svc.pricing_summary?.length ?? 0) > 0
         ? [{
@@ -178,7 +283,7 @@ function parseV1Job(job: V1Job): ParsedJob {
               .filter(ps => ps.type === 'service_option' && ps.description)
               .map(ps => {
                 const desc = ps.description!
-                // Parse optional "Nx " prefix (e.g. "3x Standard Cornhole" → qty=3, text="Standard Cornhole")
+                // Parse optional "Nx " prefix (e.g. "3x Standard Cornhole" → qty=3)
                 const qtyMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
                 return {
                   id:       '',   // synthetic — no Zenbooker modifier ID
@@ -190,12 +295,17 @@ function parseV1Job(job: V1Job): ParsedJob {
           }]
         : []
 
-    return {
+    services.push({
       service_id:         svc.service_id ?? '',
-      service_name:       svc.service_name ?? svc.name ?? '',
+      service_name:       svcName,
       service_selections: [...sfSelections, ...psSelections],
-    }
-  })
+    })
+  }
+
+  // A job is admin-only if the payload had services but ALL of them were filtered out
+  // as admin entries (ADMIN_SERVICE_NAMES). For such jobs the import loop skips
+  // booking creation entirely.
+  const isAdminOnly = !hadServices ? false : (services.length === 0)
 
   // Staff/chain assignment — handle multiple possible field names in v1
   let assignedStaff: Array<{ staff_id: string; staff_name: string }> = []
@@ -226,6 +336,7 @@ function parseV1Job(job: V1Job): ParsedJob {
     services,
     assignedStaff,
     notes,
+    isAdminOnly,
   }
 }
 
@@ -282,6 +393,7 @@ export async function POST(request: Request) {
 
   let imported = 0
   let skipped_canceled = 0
+  let skipped_admin = 0
   let errors = 0
   const error_details: Array<{ job_id: string; job_number: string; error: string }> = []
 
@@ -297,8 +409,79 @@ export async function POST(request: Request) {
 
     try {
       const parsed = parseV1Job(job)
-      const { customerName, address, eventDate, startTime, endTime, services, assignedStaff, notes } = parsed
+      const { customerName, address, eventDate, startTime, endTime, services, assignedStaff, notes, isAdminOnly } = parsed
 
+      // ── Admin-only jobs (item 6): skip booking creation entirely ──────────
+      if (isAdminOnly) {
+        await supabase.from('webhook_logs').insert({
+          received_at:      new Date().toISOString(),
+          zenbooker_job_id: jobId,
+          action:           'job.import',
+          raw_payload:      job as unknown as Record<string, unknown>,
+          result:           'skipped',
+          result_detail:    'admin-only services: no booking created',
+        })
+        skipped_admin++
+        continue
+      }
+
+      // ── Wonderfly Games Pickup (item 7) / Arena Return (item 8) ──────────
+      // Import for chain/scheduling visibility but with no equipment mapping.
+      const isPickup      = customerName === 'Wonderfly Games Pickup'
+      const isArenaReturn = customerName === 'Wonderfly Arena Return'
+
+      if (isPickup || isArenaReturn) {
+        // Resolve chain so the booking is visible on the correct vehicle schedule
+        let chainId: string | null = null
+        for (const staff of assignedStaff) {
+          const cm = cmRows.find(m => m.zenbooker_staff_id === staff.staff_id)
+          if (cm) { chainId = cm.chain_id; break }
+        }
+
+        const eventType = isPickup ? 'pickup' as const : 'arena_pickup' as const
+
+        const { data: booking, error: upsertErr } = await supabase
+          .from('bookings')
+          .upsert(
+            {
+              zenbooker_job_id: jobId,
+              customer_name:    customerName,
+              address,
+              event_date:       eventDate,
+              end_date:         null,
+              start_time:       startTime,
+              end_time:         endTime,
+              chain:            chainId,
+              status:           'confirmed' as const,
+              event_type:       eventType,
+              source:           'webhook' as const,
+              notes,
+            },
+            { onConflict: 'zenbooker_job_id' }
+          )
+          .select('id')
+          .single()
+
+        if (upsertErr || !booking) throw new Error(upsertErr?.message ?? 'upsert failed')
+
+        // Clear any stale booking_items (no equipment for these event types)
+        await supabase.from('booking_items').delete().eq('booking_id', booking.id)
+
+        await supabase.from('webhook_logs').insert({
+          received_at:      new Date().toISOString(),
+          zenbooker_job_id: jobId,
+          action:           'job.import',
+          raw_payload:      job as unknown as Record<string, unknown>,
+          result:           'success',
+          result_detail:    `${eventType}: imported with no equipment`,
+          booking_id:       booking.id,
+        })
+
+        imported++
+        continue
+      }
+
+      // ── Normal booking import ─────────────────────────────────────────────
       const eventType = resolveEventType(services, customerName)
 
       const resolution = resolveWebhookItems(services, assignedStaff, smRows, cmRows, eqRows)
@@ -322,16 +505,16 @@ export async function POST(request: Request) {
         .upsert(
           {
             zenbooker_job_id: jobId,
-            customer_name: customerName,
+            customer_name:    customerName,
             address,
-            event_date: eventDate,
-            end_date: null,
-            start_time: startTime,
-            end_time: endTime,
-            chain: chainId,
+            event_date:       eventDate,
+            end_date:         null,
+            start_time:       startTime,
+            end_time:         endTime,
+            chain:            chainId,
             status,
-            event_type: eventType,
-            source: 'webhook',
+            event_type:       eventType,
+            source:           'webhook' as const,
             notes,
           },
           { onConflict: 'zenbooker_job_id' }
@@ -355,13 +538,13 @@ export async function POST(request: Request) {
 
       const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
       await supabase.from('webhook_logs').insert({
-        received_at: new Date().toISOString(),
+        received_at:      new Date().toISOString(),
         zenbooker_job_id: jobId,
-        action: 'job.import',
-        raw_payload: job as unknown as Record<string, unknown>,
-        result: webhookResult,
-        result_detail: resultDetail,
-        booking_id: bookingId,
+        action:           'job.import',
+        raw_payload:      job as unknown as Record<string, unknown>,
+        result:           webhookResult,
+        result_detail:    resultDetail,
+        booking_id:       bookingId,
       })
 
       imported++
@@ -370,12 +553,12 @@ export async function POST(request: Request) {
       error_details.push({ job_id: jobId, job_number: jobNumber, error: String(err) })
 
       await supabase.from('webhook_logs').insert({
-        received_at: new Date().toISOString(),
+        received_at:      new Date().toISOString(),
         zenbooker_job_id: jobId,
-        action: 'job.import',
-        raw_payload: job as unknown as Record<string, unknown>,
-        result: 'error',
-        result_detail: String(err),
+        action:           'job.import',
+        raw_payload:      job as unknown as Record<string, unknown>,
+        result:           'error',
+        result_detail:    String(err),
       })
     }
   }
@@ -383,6 +566,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     imported,
     skipped_canceled,
+    skipped_admin,
     errors,
     error_details,
     next_cursor: zbResponse.has_more ? (zbResponse.next_cursor ?? null) : null,
