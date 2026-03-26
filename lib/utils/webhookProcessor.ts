@@ -259,10 +259,18 @@ export function resolveWebhookItems(
       // 2. Base mapping fallback: push ALL base rows, but only ONCE per service.
       //    Multiple unmatched options (duration, group size, logistics) must not
       //    each trigger a separate base insert.
+      //    When use_customer_qty is true on the base mapping, find the customer's
+      //    chosen quantity from any option that carries one (e.g. v1 Bubble Ball,
+      //    Elite Laser Tag, Arrow Tag where quantity is on the option but no
+      //    modifier mapping fires).
       if (!baseMappingPushed && baseMappings.length > 0) {
+        const customerQtyOption = allOptions.find(o => (o.quantity ?? 0) > 0)
         for (const bm of baseMappings) {
           if (bm.is_skip || !bm.item_id) continue
-          resolvedItems.push({ item_id: bm.item_id, qty: bm.default_qty, is_sub_item: false, parent_item_id: null })
+          const qty = bm.use_customer_qty && customerQtyOption
+            ? (customerQtyOption.quantity ?? bm.default_qty)
+            : bm.default_qty
+          resolvedItems.push({ item_id: bm.item_id, qty, is_sub_item: false, parent_item_id: null })
         }
         baseMappingPushed = true
         continue

@@ -150,8 +150,9 @@ function parseV1Job(job: V1Job): ParsedJob {
       selected_options: (field.selected_options ?? []).map(opt => ({
         id:       opt.id ?? '',
         text:     opt.text ?? opt.name ?? '',
-        quantity: opt.quantity,
-        price:    opt.price,
+        // Coerce to number — the v1 API may return quantity as a string
+        quantity: opt.quantity !== undefined ? Number(opt.quantity) : undefined,
+        price:    opt.price !== undefined ? Number(opt.price) : undefined,
       })),
     })),
   }))
