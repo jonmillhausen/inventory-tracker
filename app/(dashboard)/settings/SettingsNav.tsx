@@ -10,6 +10,7 @@ const tabs = [
   { label: 'Chain Mappings', href: '/settings/mappings/chain' },
   { label: 'Users', href: '/settings/users' },
   { label: 'Webhook Logs', href: '/settings/webhook-logs' },
+  { label: 'Import', href: '/settings/import' },
 ]
 
 export function SettingsNav() {

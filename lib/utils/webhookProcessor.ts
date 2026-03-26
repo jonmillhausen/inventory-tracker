@@ -1,4 +1,4 @@
-import type { Database } from '@/lib/types/database.types'
+import type { Database, EventType } from '@/lib/types/database.types'
 
 type ServiceMappingRow = Database['public']['Tables']['service_mappings']['Row']
 type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
@@ -54,6 +54,78 @@ export interface NameFallback {
   optionName: string
   optionId?: string   // present when fallback triggered by a service option (not a service name)
   equipmentId: string
+}
+
+// Services where the customer chooses delivery vs pickup via a modifier option.
+// All other services default to "coordinated".
+export const DELIVERY_SERVICES = new Set([
+  'Lawn Games',
+  'Foam Party - Drop-Off',
+  'Party Pack Bundle',
+  'Big Bash Bundle',
+])
+
+/**
+ * Determine event_type from the services list and customer name.
+ */
+export function resolveEventType(services: ZenbookerService[], customerName: string): EventType {
+  const allDelivery = services.length > 0 && services.every(svc => DELIVERY_SERVICES.has(svc.service_name))
+  if (!allDelivery) return 'coordinated'
+  if (customerName === 'Wonderfly Games Pickup') return 'pickup'
+  if (services.some(svc => svc.service_name.includes('Pickup'))) return 'pickup'
+  for (const svc of services) {
+    if (!DELIVERY_SERVICES.has(svc.service_name)) continue
+    const allOptions = (svc.service_selections ?? []).flatMap(sel => sel.selected_options ?? [])
+    for (const option of allOptions) {
+      if (option.text.includes('Customer Pickup')) return 'arena_pickup'
+      if (option.text.includes('Standard Delivery') || option.text.includes('Priority Delivery')) return 'dropoff'
+    }
+  }
+  return 'dropoff'
+}
+
+/**
+ * Extract a YYYY-MM-DD date string from an ISO datetime in the given timezone.
+ */
+export function extractEventDate(startDate: string | undefined, timezone: string | undefined): string | null {
+  if (!startDate) return null
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone ?? 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date(startDate))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Add durationSeconds to a "HH:MM" start time, returning "HH:MM".
+ */
+export function calcEndTime(startTime: string, durationSeconds: number): string {
+  const [h, m] = startTime.split(':').map(Number)
+  const totalMinutes = h * 60 + m + Math.round(durationSeconds / 60)
+  const endH = Math.floor(totalMinutes / 60) % 24
+  const endM = totalMinutes % 60
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
+}
+
+/**
+ * Extract booking fields from a v3 payload's data object.
+ * Handles missing end_time by computing it from start_time + estimated_duration_seconds.
+ */
+export function extractBookingFields(data: ZenbookerPayload['data']) {
+  const customerName = data.customer?.name ?? ''
+  const address = data.service_address?.formatted ?? ''
+  const eventDate = extractEventDate(data.start_date, data.timezone)
+  const startTime = data.time_slot?.start_time ?? null
+  let endTime = data.time_slot?.end_time ?? null
+  if (!endTime && startTime && data.estimated_duration_seconds) {
+    endTime = calcEndTime(startTime, data.estimated_duration_seconds)
+  }
+  return { customerName, address, eventDate, startTime, endTime }
 }
 
 export interface WebhookResolution {
