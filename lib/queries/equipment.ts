@@ -146,6 +146,57 @@ export function useUpdateSubItem() {
   })
 }
 
+export function useCreateSubItemBulk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: {
+      id: string
+      name: string
+      total_qty: number
+      links: Array<{ parent_id: string; loadout_qty: number }>
+    }) => {
+      const res = await fetch('/api/equipment/sub-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+      qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
+    },
+  })
+}
+
+export function useUpdateSubItemBulk() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (body: {
+      subId: string
+      name?: string
+      total_qty?: number
+      links: Array<{ parent_id: string; loadout_qty: number }>
+    }) => {
+      const { subId, ...rest } = body
+      const res = await fetch(`/api/equipment/sub-items/${subId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rest),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+      qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
+    },
+  })
+}
+
 export function useCreateIssueFlag() {
   const qc = useQueryClient()
   return useMutation({

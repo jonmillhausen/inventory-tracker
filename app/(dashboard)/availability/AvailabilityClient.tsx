@@ -236,7 +236,7 @@ export function AvailabilityClient({
 
                 {/* Chain columns with color badges and time ranges */}
                 {chainColumns.map(chain => {
-                  const times = chainTimes[chain.name]
+                  const times = chainTimes[chain.id]
                   const hasBookings = !!times
                   return (
                     <th
@@ -270,7 +270,7 @@ export function AvailabilityClient({
                               bookingsData.bookings,
                               bookingsData.bookingItems,
                               selectedDate,
-                              chain.name
+                              chain.id
                             )}
                             eqById={eqById}
                             onClose={() => setOpenChainPop(null)}
@@ -319,12 +319,12 @@ export function AvailabilityClient({
                     <td key={chain.id} className="px-2 py-2.5 text-center font-mono text-xs">
                       <span
                         className={
-                          row.chain_qty[chain.name] > 0
+                          row.chain_qty[chain.id] > 0
                             ? 'text-gray-900 font-medium'
                             : 'text-gray-200'
                         }
                       >
-                        {row.chain_qty[chain.name] || '—'}
+                        {row.chain_qty[chain.id] || '—'}
                       </span>
                     </td>
                   ))}

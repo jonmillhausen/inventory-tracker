@@ -1,47 +1,99 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
+import React, { useState, useMemo } from 'react'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment } from '@/lib/queries/equipment'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
 import { OOSModal } from '@/components/modals/OOSModal'
 import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal'
+import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
+import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
 import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 
-// Admin and sales can resolve issue flags (matches API route permission)
 const canResolveFlag = (r: UserRole) => r === 'admin' || r === 'sales'
 
 interface Props {
   initialEquipment: EquipmentRow[]
   initialSubItems: SubItemRow[]
+  initialSubItemLinks: SubItemLinkRow[]
   role: UserRole
 }
 
-export function EquipmentClient({ initialEquipment, initialSubItems, role }: Props) {
+export function EquipmentClient({ initialEquipment, initialSubItems, initialSubItemLinks, role }: Props) {
   const { data: equipment = [] } = useEquipment(initialEquipment)
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
+  const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
+  const deactivate = useDeactivateEquipment()
 
+  // Modal state
+  const [addingType, setAddingType] = useState<'primary' | 'sub_item' | null>(null)
+  const [editEquipment, setEditEquipment] = useState<EquipmentRow | null>(null)
+  const [editSubItem, setEditSubItem] = useState<SubItemRow | null>(null)
   const [issueFlagTarget, setIssueFlagTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
   const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
 
-  const subsByParent = new Map<string, SubItemRow[]>()
-  for (const s of subItems) {
-    if (!s.is_active) continue
-    const list = subsByParent.get(s.parent_id) ?? []
-    list.push(s)
-    subsByParent.set(s.parent_id, list)
+  // Active primary equipment only
+  const activeEquipment = useMemo(() => equipment.filter(e => e.is_active), [equipment])
+
+  // Map sub-items by id
+  const subItemMap = useMemo(() => new Map(subItems.map(s => [s.id, s])), [subItems])
+
+  // For each parent: list of { sub, loadout_qty } sorted by sub name
+  const linksByParent = useMemo(() => {
+    const map = new Map<string, Array<{ sub: SubItemRow; loadout_qty: number }>>()
+    for (const link of subItemLinks) {
+      const sub = subItemMap.get(link.sub_item_id)
+      if (!sub || !sub.is_active) continue
+      const list = map.get(link.parent_id) ?? []
+      list.push({ sub, loadout_qty: link.loadout_qty })
+      map.set(link.parent_id, list)
+    }
+    // Sort sub-items by name within each parent
+    for (const [k, list] of map) {
+      map.set(k, list.sort((a, b) => a.sub.name.localeCompare(b.sub.name)))
+    }
+    return map
+  }, [subItemLinks, subItemMap])
+
+  // Existing links for a specific sub-item (for edit pre-fill)
+  const linksBySubItem = useMemo(() => {
+    const map = new Map<string, SubItemLinkRow[]>()
+    for (const link of subItemLinks) {
+      const list = map.get(link.sub_item_id) ?? []
+      list.push(link)
+      map.set(link.sub_item_id, list)
+    }
+    return map
+  }, [subItemLinks])
+
+  function toggleParent(id: string) {
+    setExpandedParents(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Equipment</h1>
+        {canAdmin(role) && (
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => setAddingType('primary')}>+ Primary Equipment</Button>
+            <Button size="sm" variant="outline" onClick={() => setAddingType('sub_item')}>+ Sub-Item</Button>
+          </div>
+        )}
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -50,117 +102,166 @@ export function EquipmentClient({ initialEquipment, initialSubItems, role }: Pro
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
+              <th className="px-4 py-3 font-medium text-center">Loadout</th>
               <th className="px-4 py-3 font-medium text-center">OOS</th>
               <th className="px-4 py-3 font-medium text-center">Flags</th>
               <th className="px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            {equipment.filter(e => e.is_active).map(e => (
-              <React.Fragment key={e.id}>
-                <tr className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium">{e.name}</td>
-                  <td className="px-4 py-3 text-center">{e.total_qty}</td>
-                  <td className="px-4 py-3 text-center">
-                    {e.out_of_service > 0 ? (
-                      <Badge variant="destructive">{e.out_of_service}</Badge>
-                    ) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {e.issue_flag > 0 ? (
-                      <button
-                        onClick={() => canResolveFlag(role) ? setResolveFlagItemId(e.id) : undefined}
-                        className="inline-flex"
-                      >
-                        <Badge variant="outline" className="text-yellow-700 border-yellow-400 cursor-pointer">
-                          {e.issue_flag}
-                        </Badge>
-                      </button>
-                    ) : '—'}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      {canCreateIssueFlag(role) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setIssueFlagTarget({ id: e.id, name: e.name, type: 'equipment' })}
-                        >
-                          Flag
-                        </Button>
-                      )}
-                      {canAdmin(role) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}
-                        >
-                          OOS
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-                {(subsByParent.get(e.id) ?? []).map(s => (
-                  <tr key={s.id} className="bg-gray-50/50 text-gray-600 text-xs">
-                    <td className="px-4 py-2 pl-8">{s.name}</td>
-                    <td className="px-4 py-2 text-center">{s.total_qty}</td>
-                    <td className="px-4 py-2 text-center">
-                      {s.out_of_service > 0 ? <Badge variant="destructive" className="text-xs">{s.out_of_service}</Badge> : '—'}
+            {activeEquipment.map(e => {
+              const subs = linksByParent.get(e.id) ?? []
+              const isExpanded = expandedParents.has(e.id)
+
+              return (
+                <React.Fragment key={e.id}>
+                  {/* Parent row */}
+                  <tr className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-bold">
+                      {e.name}
                     </td>
-                    <td className="px-4 py-2 text-center">
-                      {s.issue_flag > 0 ? (
-                        <button
-                          onClick={() => canResolveFlag(role) ? setResolveFlagItemId(s.id) : undefined}
-                          className="inline-flex"
-                        >
-                          <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs cursor-pointer">
-                            {s.issue_flag}
+                    <td className="px-4 py-3 text-center font-medium">{e.total_qty}</td>
+                    <td className="px-4 py-3 text-center text-gray-300">—</td>
+                    <td className="px-4 py-3 text-center">
+                      {e.out_of_service > 0 ? (
+                        <Badge variant="destructive">{e.out_of_service}</Badge>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {e.issue_flag > 0 ? (
+                        <button onClick={() => canResolveFlag(role) ? setResolveFlagItemId(e.id) : undefined} className="inline-flex">
+                          <Badge variant="outline" className="text-yellow-700 border-yellow-400 cursor-pointer">
+                            {e.issue_flag}
                           </Badge>
                         </button>
                       ) : '—'}
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-1">
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2 flex-wrap">
                         {canCreateIssueFlag(role) && (
-                          <Button size="sm" variant="outline" className="h-6 text-xs"
-                            onClick={() => setIssueFlagTarget({ id: s.id, name: s.name, type: 'sub_item' })}>
+                          <Button size="sm" variant="outline"
+                            onClick={() => setIssueFlagTarget({ id: e.id, name: e.name, type: 'equipment' })}>
                             Flag
                           </Button>
                         )}
                         {canAdmin(role) && (
-                          <Button size="sm" variant="outline" className="h-6 text-xs"
-                            onClick={() => setOosTarget({ id: s.id, name: s.name, type: 'sub_item' })}>
-                            OOS
-                          </Button>
+                          <>
+                            <Button size="sm" variant="outline"
+                              onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}>
+                              OOS
+                            </Button>
+                            <Button size="sm" variant="outline"
+                              onClick={() => setEditEquipment(e)}>
+                              Edit
+                            </Button>
+                          </>
                         )}
                       </div>
                     </td>
                   </tr>
-                ))}
-              </React.Fragment>
-            ))}
+
+                  {/* Supplies toggle row */}
+                  {subs.length > 0 && (
+                    <tr className="bg-gray-50/30">
+                      <td colSpan={6} className="px-4 py-1">
+                        <button
+                          onClick={() => toggleParent(e.id)}
+                          className="flex items-center gap-1 text-xs text-gray-500 font-semibold hover:text-gray-700"
+                        >
+                          {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                          {e.name} Supplies ({subs.length})
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* Sub-item rows */}
+                  {isExpanded && subs.map(({ sub, loadout_qty }) => (
+                    <tr key={sub.id} className="bg-gray-50/50 text-gray-600 text-xs">
+                      <td className="px-4 py-2 pl-10">{sub.name}</td>
+                      <td className="px-4 py-2 text-center">{sub.total_qty}</td>
+                      <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>
+                      <td className="px-4 py-2 text-center">
+                        {sub.out_of_service > 0 ? (
+                          <Badge variant="destructive" className="text-xs">{sub.out_of_service}</Badge>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {sub.issue_flag > 0 ? (
+                          <button onClick={() => canResolveFlag(role) ? setResolveFlagItemId(sub.id) : undefined} className="inline-flex">
+                            <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs cursor-pointer">
+                              {sub.issue_flag}
+                            </Badge>
+                          </button>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex gap-1">
+                          {canCreateIssueFlag(role) && (
+                            <Button size="sm" variant="outline" className="h-6 text-xs"
+                              onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
+                              Flag
+                            </Button>
+                          )}
+                          {canAdmin(role) && (
+                            <>
+                              <Button size="sm" variant="outline" className="h-6 text-xs"
+                                onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
+                                OOS
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-6 text-xs"
+                                onClick={() => setEditSubItem(sub)}>
+                                Edit
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              )
+            })}
           </tbody>
         </table>
       </div>
 
-      {issueFlagTarget && (
-        <IssueFlagModal
-          target={issueFlagTarget}
-          onClose={() => setIssueFlagTarget(null)}
+      {/* Add primary equipment */}
+      {addingType === 'primary' && (
+        <EquipmentFormModal onClose={() => setAddingType(null)} />
+      )}
+
+      {/* Edit primary equipment */}
+      {editEquipment && (
+        <EquipmentFormModal item={editEquipment} onClose={() => setEditEquipment(null)} />
+      )}
+
+      {/* Add sub-item */}
+      {addingType === 'sub_item' && (
+        <SubItemFormModal
+          allEquipment={activeEquipment}
+          onClose={() => setAddingType(null)}
         />
+      )}
+
+      {/* Edit sub-item */}
+      {editSubItem && (
+        <SubItemFormModal
+          item={editSubItem}
+          allEquipment={activeEquipment}
+          existingLinks={linksBySubItem.get(editSubItem.id) ?? []}
+          onClose={() => setEditSubItem(null)}
+        />
+      )}
+
+      {issueFlagTarget && (
+        <IssueFlagModal target={issueFlagTarget} onClose={() => setIssueFlagTarget(null)} />
       )}
       {oosTarget && (
-        <OOSModal
-          target={oosTarget}
-          onClose={() => setOosTarget(null)}
-        />
+        <OOSModal target={oosTarget} onClose={() => setOosTarget(null)} />
       )}
       {resolveFlagItemId && (
-        <ResolveIssueFlagModal
-          itemId={resolveFlagItemId}
-          onClose={() => setResolveFlagItemId(null)}
-        />
+        <ResolveIssueFlagModal itemId={resolveFlagItemId} onClose={() => setResolveFlagItemId(null)} />
       )}
     </div>
   )

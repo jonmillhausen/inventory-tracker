@@ -330,23 +330,64 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
     }
   }
 
+  async function handlePrintAll() {
+    const chainsWithEvents = visibleChains.filter(c =>
+      bookings.some(b => b.chain === c.id && isBookingActiveOnDate(b, selectedDate))
+    )
+    if (chainsWithEvents.length === 0) return
+    setPrintError(null)
+    // Fetch all tokens in parallel then open tabs
+    const tokens = await Promise.all(
+      chainsWithEvents.map(async c => {
+        const activeForChain = bookings.filter(b => b.chain === c.id && isBookingActiveOnDate(b, selectedDate))
+        const end_date = activeForChain.reduce<string | null>((latest, b) => {
+          const effectiveEnd = b.end_date ?? b.event_date
+          if (!effectiveEnd) return latest
+          return latest === null || effectiveEnd > latest ? effectiveEnd : latest
+        }, null) ?? selectedDate
+        const res = await fetch('/api/packing-list/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chain: c.id, date: selectedDate, end_date }),
+        })
+        if (!res.ok) return null
+        const { url } = await res.json()
+        return url as string
+      })
+    )
+    for (const url of tokens) {
+      if (url) window.open(url, '_blank')
+    }
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Chain Loading</h1>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="plDate" className="text-sm font-medium">Date</Label>
-          <Input
-            id="plDate"
-            type="date"
-            className="w-44"
-            value={selectedDate}
-            onChange={e => {
-              setSelectedDate(e.target.value)
-              setCheckedItems(new Set())
-            }}
-          />
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Chain Loading</h1>
+          <div className="flex items-center gap-2 mt-2">
+            <Label htmlFor="plDate" className="text-sm font-medium">Date</Label>
+            <Input
+              id="plDate"
+              type="date"
+              className="w-44"
+              value={selectedDate}
+              onChange={e => {
+                setSelectedDate(e.target.value)
+                setCheckedItems(new Set())
+              }}
+            />
+          </div>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handlePrintAll}
+          disabled={!!printingChain}
+          className="mt-1"
+        >
+          Print All
+        </Button>
       </div>
 
       {printError && (

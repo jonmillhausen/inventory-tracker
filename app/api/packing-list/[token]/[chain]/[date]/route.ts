@@ -44,7 +44,7 @@ export async function GET(
   const windowEnd = new Date(end_date + 'T00:00:00Z')
   windowEnd.setUTCDate(windowEnd.getUTCDate() + 1)
 
-  if (today < windowStart || today > windowEnd) {
+  if (today > windowEnd) {
     return new Response('Forbidden', { status: 403 })
   }
 

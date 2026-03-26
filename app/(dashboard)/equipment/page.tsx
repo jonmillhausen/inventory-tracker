@@ -5,6 +5,7 @@ import type { Database, UserRole } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 
 export default async function EquipmentPage() {
   const supabase = await createClient()
@@ -14,15 +15,17 @@ export default async function EquipmentPage() {
   const { data: profile } = await supabase
     .from('users').select('role').eq('id', user!.id).single()
 
-  const [{ data: equipment }, { data: subItems }] = await Promise.all([
+  const [{ data: equipment }, { data: subItems }, { data: subItemLinks }] = await Promise.all([
     supabase.from('equipment').select('*').order('name'),
     supabase.from('equipment_sub_items').select('*').order('name'),
+    supabase.from('equipment_sub_item_links').select('*'),
   ])
 
   return (
     <EquipmentClient
       initialEquipment={(equipment ?? []) as EquipmentRow[]}
       initialSubItems={(subItems ?? []) as SubItemRow[]}
+      initialSubItemLinks={(subItemLinks ?? []) as SubItemLinkRow[]}
       role={((profile as { role: string } | null)?.role ?? 'readonly') as UserRole}
     />
   )

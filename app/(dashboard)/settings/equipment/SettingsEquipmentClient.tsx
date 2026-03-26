@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useEquipment, useEquipmentSubItems, useDeactivateEquipment } from '@/lib/queries/equipment'
+import React, { useMemo, useState } from 'react'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment } from '@/lib/queries/equipment'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
@@ -10,34 +10,55 @@ import type { Database } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
+type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 
 interface Props {
   initialEquipment: EquipmentRow[]
   initialSubItems: SubItemRow[]
+  initialSubItemLinks: SubItemLinkRow[]
 }
 
-export function SettingsEquipmentClient({ initialEquipment, initialSubItems }: Props) {
+export function SettingsEquipmentClient({ initialEquipment, initialSubItems, initialSubItemLinks }: Props) {
   const { data: equipment = [] } = useEquipment(initialEquipment)
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
+  const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
 
   const [addEquipment, setAddEquipment] = useState(false)
   const [editItem, setEditItem] = useState<EquipmentRow | null>(null)
-  const [addSubItem, setAddSubItem] = useState<{ parentId: string; parentName: string } | null>(null)
-  const [editSubItem, setEditSubItem] = useState<{ item: SubItemRow; parentId: string; parentName: string } | null>(null)
+  const [addSubItem, setAddSubItem] = useState(false)
+  const [editSubItem, setEditSubItem] = useState<SubItemRow | null>(null)
 
-  const subsByParent = new Map<string, SubItemRow[]>()
-  for (const s of subItems) {
-    const list = subsByParent.get(s.parent_id) ?? []
-    list.push(s)
-    subsByParent.set(s.parent_id, list)
-  }
+  const activeEquipment = useMemo(() => equipment.filter(e => e.is_active), [equipment])
+
+  const subsByParent = useMemo(() => {
+    const map = new Map<string, SubItemRow[]>()
+    for (const s of subItems) {
+      const list = map.get(s.parent_id) ?? []
+      list.push(s)
+      map.set(s.parent_id, list)
+    }
+    return map
+  }, [subItems])
+
+  const linksBySubItem = useMemo(() => {
+    const map = new Map<string, SubItemLinkRow[]>()
+    for (const link of subItemLinks) {
+      const list = map.get(link.sub_item_id) ?? []
+      list.push(link)
+      map.set(link.sub_item_id, list)
+    }
+    return map
+  }, [subItemLinks])
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Equipment Catalog</h1>
-        <Button onClick={() => setAddEquipment(true)}>Add Equipment</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setAddEquipment(true)}>Add Equipment</Button>
+          <Button variant="outline" onClick={() => setAddSubItem(true)}>Add Sub-Item</Button>
+        </div>
       </div>
 
       <div className="border rounded-lg overflow-hidden">
@@ -66,10 +87,6 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems }: P
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => setEditItem(e)}>Edit</Button>
-                      <Button size="sm" variant="outline"
-                        onClick={() => setAddSubItem({ parentId: e.id, parentName: e.name })}>
-                        + Sub-item
-                      </Button>
                       {e.is_active && (
                         <Button size="sm" variant="outline"
                           onClick={() => deactivate.mutate(e.id)}
@@ -92,7 +109,7 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems }: P
                     </td>
                     <td className="px-4 py-2">
                       <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => setEditSubItem({ item: s, parentId: e.id, parentName: e.name })}>
+                        onClick={() => setEditSubItem(s)}>
                         Edit
                       </Button>
                     </td>
@@ -108,16 +125,15 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems }: P
       {editItem && <EquipmentFormModal item={editItem} onClose={() => setEditItem(null)} />}
       {addSubItem && (
         <SubItemFormModal
-          parentId={addSubItem.parentId}
-          parentName={addSubItem.parentName}
-          onClose={() => setAddSubItem(null)}
+          allEquipment={activeEquipment}
+          onClose={() => setAddSubItem(false)}
         />
       )}
       {editSubItem && (
         <SubItemFormModal
-          parentId={editSubItem.parentId}
-          parentName={editSubItem.parentName}
-          item={editSubItem.item}
+          item={editSubItem}
+          allEquipment={activeEquipment}
+          existingLinks={linksBySubItem.get(editSubItem.id) ?? []}
           onClose={() => setEditSubItem(null)}
         />
       )}

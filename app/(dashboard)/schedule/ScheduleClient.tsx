@@ -83,15 +83,23 @@ function getSetup(
   return { before: hasCustomSetup ? maxSetup : 45, after: hasCustomCleanup ? maxCleanup : 45 }
 }
 
-async function fetchTravelMin(from: string, to: string, date: string, time: string): Promise<number> {
+interface TravelInfo {
+  minutes: number
+  hasToll: boolean
+}
+
+async function fetchTravelInfo(from: string, to: string, date: string, time: string): Promise<TravelInfo> {
   try {
     const params = new URLSearchParams({ from, to, date, time })
     const res = await fetch(`/api/travel-estimates?${params}`)
-    if (!res.ok) return FALLBACK_TRAVEL_MIN
+    if (!res.ok) return { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
     const data = await res.json()
-    return typeof data.minutes === 'number' ? data.minutes : FALLBACK_TRAVEL_MIN
+    return {
+      minutes: typeof data.minutes === 'number' ? data.minutes : FALLBACK_TRAVEL_MIN,
+      hasToll: data.has_toll === true,
+    }
   } catch {
-    return FALLBACK_TRAVEL_MIN
+    return { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
   }
 }
 
@@ -101,8 +109,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   const [showTravel, setShowTravel] = useState(true)
   const [showSetup, setShowSetup] = useState(true)
   const [popupId, setPopupId] = useState<string | null>(null)
-  // travelTimes: key = "${from}::${to}", value = minutes
-  const [travelTimes, setTravelTimes] = useState<Map<string, number>>(new Map())
+  // travelTimes: key = "${from}::${to}", value = { minutes, hasToll }
+  const [travelTimes, setTravelTimes] = useState<Map<string, TravelInfo>>(new Map())
 
   const { data } = useBookings(initialData)
   const { data: chains = [] } = useChains(initialChains)
@@ -154,7 +162,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     return chainCols.filter(c => c.bookings.length > 0)
   }, [chains, activeBookings])
 
-  // Fetch travel times for all routes when date or columns change
+  // Fetch travel times for all routes (including return trips) when date or columns change
   const fetchAllTravelTimes = useCallback(async () => {
     if (!showTravel) return
     const pairs: Array<{ from: string; to: string; time: string }> = []
@@ -173,17 +181,28 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
           }
         }
       }
+      // Return trip: last event back to base
+      const lastEvt = evts[evts.length - 1]
+      if (lastEvt?.address) {
+        const returnTime = lastEvt.end_time ?? '17:00'
+        pairs.push({ from: lastEvt.address, to: BASE_ADDRESS, time: returnTime })
+      }
     }
 
     if (pairs.length === 0) return
 
     const results = await Promise.all(
-      pairs.map(p => fetchTravelMin(p.from, p.to, selectedDate, p.time).then(min => ({ key: `${p.from}::${p.to}`, min })))
+      pairs.map(p =>
+        fetchTravelInfo(p.from, p.to, selectedDate, p.time).then(info => ({
+          key: `${p.from}::${p.to}`,
+          info,
+        }))
+      )
     )
 
     setTravelTimes(prev => {
       const next = new Map(prev)
-      for (const { key, min } of results) next.set(key, min)
+      for (const { key, info } of results) next.set(key, info)
       return next
     })
   }, [columns, selectedDate, showTravel])
@@ -192,8 +211,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     fetchAllTravelTimes()
   }, [fetchAllTravelTimes])
 
-  function getTravelMin(from: string, to: string): number {
-    return travelTimes.get(`${from}::${to}`) ?? FALLBACK_TRAVEL_MIN
+  function getTravelInfo(from: string, to: string): TravelInfo {
+    return travelTimes.get(`${from}::${to}`) ?? { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
   }
 
   const colWidth = Math.max(120, 900 / Math.max(columns.length, 1))
@@ -203,9 +222,20 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Schedule Board</h1>
         <div className="flex items-center gap-4">
-          {/* Toggle controls */}
+          <h1 className="text-2xl font-bold">Schedule Board</h1>
+          <div className="flex items-center gap-2">
+            <Label htmlFor="schedDate" className="text-sm font-medium">Date</Label>
+            <Input
+              id="schedDate"
+              type="date"
+              className="w-44"
+              value={selectedDate}
+              onChange={e => setSelectedDate(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
           <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -224,16 +254,6 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
             />
             Setup/Cleanup
           </label>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="schedDate" className="text-sm font-medium">Date</Label>
-            <Input
-              id="schedDate"
-              type="date"
-              className="w-44"
-              value={selectedDate}
-              onChange={e => setSelectedDate(e.target.value)}
-            />
-          </div>
         </div>
       </div>
 
@@ -314,38 +334,45 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                     const eventHeight = Math.max((e - s) * PX_PER_MIN, 20)
                     const fromAddr = bi === 0 ? BASE_ADDRESS : (evts[bi - 1].address ?? BASE_ADDRESS)
                     const toAddr = booking.address ?? ''
-                    const travelMin = toAddr ? getTravelMin(fromAddr, toAddr) : FALLBACK_TRAVEL_MIN
+                    const travelInfo = toAddr ? getTravelInfo(fromAddr, toAddr) : { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
+                    const isLast = bi === evts.length - 1
                     const isOpen = popupId === booking.id
+
+                    // Return travel info (last event → base)
+                    const returnInfo = isLast && toAddr
+                      ? getTravelInfo(toAddr, BASE_ADDRESS)
+                      : { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
 
                     // booking items for equipment list in popup
                     const items = bookingItems.filter(bi2 => bi2.booking_id === booking.id)
 
                     return (
                       <div key={booking.id}>
-                        {/* Travel block */}
+                        {/* Travel to event block */}
                         {showTravel && (
                           <div
                             className="absolute left-0.5 right-0.5 flex items-center justify-center gap-0.5 rounded overflow-hidden border border-gray-200"
                             style={{
                               top: bi === 0
-                                ? yPos(Math.max(s - su.before - travelMin, START_H * 60))
+                                ? yPos(Math.max(s - su.before - travelInfo.minutes, START_H * 60))
                                 : yPos(timeToMin(evts[bi - 1].end_time) + getSetup(evts[bi - 1], bookingItems, equipmentMap).after),
                               height: bi === 0
-                                ? travelMin * PX_PER_MIN
+                                ? travelInfo.minutes * PX_PER_MIN
                                 : Math.max(
                                     Math.min(
-                                      travelMin,
+                                      travelInfo.minutes,
                                       Math.max(s - su.before - timeToMin(evts[bi - 1].end_time) - getSetup(evts[bi - 1], bookingItems, equipmentMap).after, 0)
                                     ),
                                     0
-                                  ) * PX_PER_MIN || travelMin * PX_PER_MIN,
+                                  ) * PX_PER_MIN || travelInfo.minutes * PX_PER_MIN,
                               backgroundColor: '#f1f5f9',
                               fontSize: 8,
                               color: '#64748b',
                             }}
                           >
                             <Truck size={8} />
-                            <span>{travelMin}m</span>
+                            <span>{travelInfo.minutes}m</span>
+                            {travelInfo.hasToll && <span title="Toll route">🛣️</span>}
                           </div>
                         )}
 
@@ -439,9 +466,9 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                                   Equipment
                                 </div>
                                 {items.map((item, i) => (
-                                  <div key={i} className="flex justify-between" style={{ fontSize: 10, padding: '1px 0' }}>
+                                  <div key={i} style={{ fontSize: 10, padding: '1px 0' }}>
+                                    <span className="font-semibold mr-1">×{item.qty}</span>
                                     <span>{equipmentMap.get(item.item_id)?.name ?? item.item_id}</span>
-                                    <span className="font-semibold">×{item.qty}</span>
                                   </div>
                                 ))}
                               </div>
@@ -462,6 +489,24 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                             }}
                           >
                             {su.after}m Cleanup
+                          </div>
+                        )}
+
+                        {/* Return travel block (last event only) */}
+                        {isLast && showTravel && toAddr && (
+                          <div
+                            className="absolute left-0.5 right-0.5 flex items-center justify-center gap-0.5 rounded overflow-hidden border border-gray-200"
+                            style={{
+                              top: yPos(e + su.after),
+                              height: returnInfo.minutes * PX_PER_MIN,
+                              backgroundColor: '#f1f5f9',
+                              fontSize: 8,
+                              color: '#64748b',
+                            }}
+                          >
+                            <Truck size={8} />
+                            <span>{returnInfo.minutes}m</span>
+                            {returnInfo.hasToll && <span title="Toll route">🛣️</span>}
                           </div>
                         )}
                       </div>
