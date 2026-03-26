@@ -80,13 +80,39 @@ const LASER_TAG_V1_SERVICE_ID    = '1747883952074x309158420488483400'
 const LAWN_GAMES_V1_SERVICE_ID   = '1751332967401x820543194421858200'
 const OBSTACLE_COURSE_V1_SERVICE_ID = '1749611522093x499322152628127740'
 
-// Internal admin entries — jobs whose ONLY services are these are skipped entirely.
-// Individual services with these names are filtered out before item resolution.
-const ADMIN_SERVICE_NAMES = new Set([
+// Internal admin/logistics service names — exact matches (lowercase).
+// Individual services with these names are silently filtered out.
+// If ALL non-admin services are filtered, no booking is created (isAdminOnly).
+const ADMIN_SERVICE_NAMES_EXACT = new Set([
   'booking adj',
   'large van unavailable',
   'late night surcharge',
+  'detailed late night pick-up',
+  'setup fee',
+  'generator, set up/break down',
+  '3 additional bottles of foam solution',
+  '3 bottles of extra foam solution',
+  'additional 10 bottles of foam solution',
+  'event staffing',
+  'event details',
 ])
+
+/**
+ * Returns true for service names that are internal annotations, fees, or
+ * logistics notes — no booking or equipment should be created.
+ */
+function isAdminServiceName(name: string): boolean {
+  const nl = name.toLowerCase()
+  if (ADMIN_SERVICE_NAMES_EXACT.has(nl)) return true
+  // "Additional N minutes rental time charge" and similar duration-extension fees
+  if (/additional\s+\d+\s+minutes/i.test(nl)) return true
+  // "Pick-up [time]" — logistics time-window entries, e.g. "Pick-up 7 pm to 9pm same day"
+  // Does NOT match "Standard Pick-up" (starts with "Standard") or "Pick-up at Wonderfly Arena"
+  if (/^pick-?up\s+\d/i.test(nl)) return true
+  // "BRING …" — internal staff delivery/prep notes
+  if (nl.startsWith('bring ')) return true
+  return false
+}
 
 // Promo event service name substrings — any match routes to synthetic 'v1:promo_event'
 // which maps to the promo_supplies equipment item in service_mappings.
@@ -95,6 +121,22 @@ const PROMO_SERVICE_PATTERNS = [
   'promo booth',
   'tailgoat promo',
   'polar plunge promo',
+  'promo tent',
+  'promo supplies',
+]
+
+// Pickup-type service name substrings — entire job imports as event_type='pickup',
+// no equipment, status='confirmed'.
+const PICKUP_SERVICE_PATTERNS = [
+  'lawn game pickup',
+  'lawn game pick-up',
+  'lawn games pick-up',
+  'standard pick-up',
+]
+
+// Arena-pickup service name substrings — imports as event_type='arena_pickup'.
+const ARENA_PICKUP_SERVICE_PATTERNS = [
+  'pick-up at wonderfly arena',
 ]
 
 // ── Time helpers ──────────────────────────────────────────────────────────
@@ -141,6 +183,10 @@ interface ParsedJob {
   notes: string
   /** True when all services were admin-only entries and no booking should be created. */
   isAdminOnly: boolean
+  /** True when a service name identifies this as a Wonderfly staff lawn-game/standard pickup. */
+  isPickupJob: boolean
+  /** True when a service name identifies this as a return to Wonderfly Arena. */
+  isArenaPickupJob: boolean
 }
 
 function parseV1Job(job: V1Job): ParsedJob {
@@ -175,27 +221,44 @@ function parseV1Job(job: V1Job): ParsedJob {
   }
 
   // ── Service normalization ──────────────────────────────────────────────
-  // Each service is handled in a priority order before the generic path:
-  //   1. Admin services  → filtered out (item 6)
-  //   2. Promo events    → synthetic 'v1:promo_event' service_id (item 5)
-  //   3. Gaga Pit        → synthetic 'v1:gaga_pit' service_id (item 11)
-  //   4. Laser Tag v1    → synthetic modifier options for Elite / Lite variant (items 1+2)
-  //   5. Lawn Games v1   → skip if no priced options (item 3)
-  //   6. Generic path    → service_fields options + pricing_summary fallback
+  // Priority order for each service:
+  //   1. Admin/logistics  → skip silently (no booking item, no fallback)
+  //   2. Pickup by name   → set isPickupJob / isArenaPickupJob flag, skip
+  //   3. Promo events     → synthetic 'v1:promo_event' service_id
+  //   4. Gaga Pit         → synthetic 'v1:gaga_pit' service_id
+  //   5. Laser Tag v1     → synthetic modifier options for Elite / Lite variant
+  //   6. Water Tag        → synthetic 'v1:water_tag' service_id with extracted qty
+  //   7. Water Guns       → synthetic 'v1:water_guns' service_id with extracted qty
+  //   8. Arena LT Rental  → synthetic 'v1:arena_laser_tag' service_id with extracted qty
+  //   9. Lawn Games v1    → skip if no priced options
+  //  10. Generic path     → service_fields options + pricing_summary fallback
 
   let hadServices = false   // at least one non-admin service existed in the payload
+  let isPickupJob     = false
+  let isArenaPickupJob = false
   const services: ZenbookerService[] = []
 
   for (const svc of job.services ?? []) {
     const svcName = svc.service_name ?? svc.name ?? ''
     const nameLower = svcName.toLowerCase()
 
-    // 1. Admin-only entries — filter silently (item 6)
-    if (ADMIN_SERVICE_NAMES.has(nameLower)) continue
+    // 1. Admin/logistics — filter silently
+    if (isAdminServiceName(svcName)) continue
 
     hadServices = true
 
-    // 2. Promo events → synthetic service_id (item 5)
+    // 2a. Pickup-type service names → mark job as pickup (no equipment)
+    if (PICKUP_SERVICE_PATTERNS.some(p => nameLower.includes(p))) {
+      isPickupJob = true
+      continue
+    }
+    // 2b. Arena-pickup service names → mark job as arena_pickup
+    if (ARENA_PICKUP_SERVICE_PATTERNS.some(p => nameLower.includes(p))) {
+      isArenaPickupJob = true
+      continue
+    }
+
+    // 3. Promo events → synthetic service_id
     if (PROMO_SERVICE_PATTERNS.some(p => nameLower.includes(p))) {
       services.push({
         service_id:         'v1:promo_event',
@@ -205,7 +268,7 @@ function parseV1Job(job: V1Job): ParsedJob {
       continue
     }
 
-    // 3. Gaga Pit → synthetic service_id (item 11)
+    // 4. Gaga Pit → synthetic service_id
     // TODO: replace 'v1:gaga_pit' with the actual service_id once confirmed via:
     //   SELECT raw_payload->'services' FROM webhook_logs
     //   WHERE action = 'job.import' AND result_detail LIKE '%unmapped: Gaga%' LIMIT 1;
@@ -218,10 +281,9 @@ function parseV1Job(job: V1Job): ParsedJob {
       continue
     }
 
-    // 4. Laser Tag v1 — emit synthetic modifier options for Elite vs Lite (items 1+2)
+    // 5. Laser Tag v1 — emit synthetic modifier options for Elite vs Lite
     //    The v1 API surfaces the tagger variant and customer quantity only in
     //    pricing_summary (e.g. "12x Elite Laser Tag" or "12x Laser Tag Lite (ages 5+)").
-    //    We map each to a synthetic modifier_id that has a service_mapping row in the DB.
     if (svc.service_id === LASER_TAG_V1_SERVICE_ID) {
       const syntheticOptions: Array<{ id: string; text: string; quantity: number }> = []
       for (const ps of svc.pricing_summary ?? []) {
@@ -248,7 +310,46 @@ function parseV1Job(job: V1Job): ParsedJob {
       continue
     }
 
-    // 5. Lawn Games — skip if service has no priced selections (item 3)
+    // 6. Water Tag (e.g. "20 Water Tag sets", "10 Water Tag sets")
+    //    Quantity extracted from service name numeric prefix.
+    if (nameLower.includes('water tag')) {
+      const qtyMatch = svcName.match(/^(\d+)\s+water\s+tag/i)
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+      services.push({
+        service_id:         'v1:water_tag',
+        service_name:       svcName,
+        service_selections: [{ selected_options: [{ id: 'v1_water_tag', text: svcName, quantity: qty }] }],
+      })
+      continue
+    }
+
+    // 7. Water Guns (e.g. "10 Water Guns", "20 Water Guns")
+    //    Quantity extracted from service name numeric prefix.
+    if (nameLower.includes('water gun')) {
+      const qtyMatch = svcName.match(/^(\d+)\s+water\s+gun/i)
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+      services.push({
+        service_id:         'v1:water_guns',
+        service_name:       svcName,
+        service_selections: [{ selected_options: [{ id: 'v1_water_guns', text: svcName, quantity: qty }] }],
+      })
+      continue
+    }
+
+    // 8. Arena Laser Tag Rental (e.g. "Arena Laser Tag Rental - 10 sets")
+    //    Quantity extracted from "- N sets" suffix.
+    if (nameLower.includes('arena laser tag rental')) {
+      const qtyMatch = svcName.match(/[-–]\s*(\d+)\s+set/i)
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+      services.push({
+        service_id:         'v1:arena_laser_tag',
+        service_name:       svcName,
+        service_selections: [{ selected_options: [{ id: 'v1_arena_lt', text: svcName, quantity: qty }] }],
+      })
+      continue
+    }
+
+    // 9. Lawn Games — skip if service has no priced selections
     //    Blank Lawn Games services are sometimes added by reps as event annotations.
     if (svc.service_id === LAWN_GAMES_V1_SERVICE_ID) {
       const hasPricedSummary = (svc.pricing_summary ?? [])
@@ -258,7 +359,7 @@ function parseV1Job(job: V1Job): ParsedJob {
       if (!hasPricedSummary && !hasFieldOptions) continue
     }
 
-    // 6. Generic path
+    // 10. Generic path
     // Build selections from service_fields (v1) or service_selections (v3 fallback).
     const sfSelections = (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
       selected_options: (field.selected_options ?? []).map(opt => ({
@@ -302,10 +403,9 @@ function parseV1Job(job: V1Job): ParsedJob {
     })
   }
 
-  // A job is admin-only if the payload had services but ALL of them were filtered out
-  // as admin entries (ADMIN_SERVICE_NAMES). For such jobs the import loop skips
-  // booking creation entirely.
-  const isAdminOnly = !hadServices ? false : (services.length === 0)
+  // A job is admin-only if the payload had services but ALL of them were filtered
+  // out as admin/logistics entries — and none triggered the pickup flags.
+  const isAdminOnly = hadServices && !isPickupJob && !isArenaPickupJob && services.length === 0
 
   // Staff/chain assignment — handle multiple possible field names in v1
   let assignedStaff: Array<{ staff_id: string; staff_name: string }> = []
@@ -326,8 +426,8 @@ function parseV1Job(job: V1Job): ParsedJob {
     .join('\n')
 
   return {
-    jobId:        job.id,
-    jobNumber:    job.job_number ?? '',
+    jobId:          job.id,
+    jobNumber:      job.job_number ?? '',
     customerName,
     address,
     eventDate,
@@ -337,6 +437,8 @@ function parseV1Job(job: V1Job): ParsedJob {
     assignedStaff,
     notes,
     isAdminOnly,
+    isPickupJob,
+    isArenaPickupJob,
   }
 }
 
@@ -409,7 +511,11 @@ export async function POST(request: Request) {
 
     try {
       const parsed = parseV1Job(job)
-      const { customerName, address, eventDate, startTime, endTime, services, assignedStaff, notes, isAdminOnly } = parsed
+      const {
+        customerName, address, eventDate, startTime, endTime,
+        services, assignedStaff, notes,
+        isAdminOnly, isPickupJob, isArenaPickupJob,
+      } = parsed
 
       // ── Admin-only jobs (item 6): skip booking creation entirely ──────────
       if (isAdminOnly) {
@@ -425,10 +531,11 @@ export async function POST(request: Request) {
         continue
       }
 
-      // ── Wonderfly Games Pickup (item 7) / Arena Return (item 8) ──────────
+      // ── Wonderfly Games Pickup / Arena Return ─────────────────────────────
       // Import for chain/scheduling visibility but with no equipment mapping.
-      const isPickup      = customerName === 'Wonderfly Games Pickup'
-      const isArenaReturn = customerName === 'Wonderfly Arena Return'
+      // Detected by customerName (v3 webhook) OR service name patterns (v1 import).
+      const isPickup      = customerName === 'Wonderfly Games Pickup'  || isPickupJob
+      const isArenaReturn = customerName === 'Wonderfly Arena Return'   || isArenaPickupJob
 
       if (isPickup || isArenaReturn) {
         // Resolve chain so the booking is visible on the correct vehicle schedule
