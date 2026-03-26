@@ -33,7 +33,9 @@ export function Sidebar({ role }: SidebarProps) {
 
   return (
     <nav className="flex flex-col w-56 shrink-0 h-full bg-gray-900 text-gray-100 p-4 gap-1">
-      <div className="text-lg font-bold mb-6 px-2">Wonderfly</div>
+      <div className="mb-6 px-1">
+        <img src="/wonderfly-logo.png" alt="Wonderfly" style={{ height: 30, width: 'auto' }} />
+      </div>
       {NAV_ITEMS.map(({ label, href }) => (
         <Link key={href} href={href} className={navClass(href)}>
           {label}

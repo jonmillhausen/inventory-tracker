@@ -215,12 +215,13 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     return travelTimes.get(`${from}::${to}`) ?? { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
   }
 
-  // Map: colId → Set of booking IDs that overlap with the previous event in that column
+  // Map: colId → overlap windows (exact time ranges in minutes) to render as overlays
+  interface OverlapWindow { startMin: number; endMin: number }
   const columnOverlaps = useMemo(() => {
-    const result = new Map<string, Set<string>>()
+    const result = new Map<string, OverlapWindow[]>()
     for (const col of columns) {
       const evts = col.bookings
-      const overlapping = new Set<string>()
+      const windows: OverlapWindow[] = []
       for (let i = 1; i < evts.length; i++) {
         const prev = evts[i - 1]
         const curr = evts[i]
@@ -230,10 +231,10 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
         const travel = toAddr ? getTravelInfo(fromAddr, toAddr).minutes : FALLBACK_TRAVEL_MIN
         const currNeedsDepartBy = timeToMin(curr.start_time) - getSetup(curr, bookingItems, equipmentMap).before - travel
         if (currNeedsDepartBy < prevSeqEnd) {
-          overlapping.add(curr.id)
+          windows.push({ startMin: currNeedsDepartBy, endMin: prevSeqEnd })
         }
       }
-      if (overlapping.size > 0) result.set(col.id, overlapping)
+      if (windows.length > 0) result.set(col.id, windows)
     }
     return result
   }, [columns, travelTimes, bookingItems, equipmentMap])
@@ -305,7 +306,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
               Time
             </div>
             {columns.map(col => {
-              const hasOverlap = columnOverlaps.has(col.id)
+              const hasOverlap = (columnOverlaps.get(col.id)?.length ?? 0) > 0
               return (
                 <div
                   key={col.id}
@@ -366,6 +367,29 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                     />
                   ))}
 
+                  {/* Overlap overlays — rendered on top of all event blocks */}
+                  {(columnOverlaps.get(col.id) ?? []).map((w, wi) => {
+                    const durationMin = Math.round(w.endMin - w.startMin)
+                    return (
+                      <div
+                        key={`overlap-${wi}`}
+                        className="absolute left-0.5 right-0.5 flex items-center justify-center pointer-events-none rounded"
+                        style={{
+                          top: yPos(w.startMin),
+                          height: Math.max(durationMin * PX_PER_MIN, 10),
+                          backgroundColor: 'rgba(254, 202, 202, 0.85)',
+                          border: '1px solid #ef4444',
+                          fontSize: 8,
+                          color: '#991b1b',
+                          fontWeight: 600,
+                          zIndex: 10,
+                        }}
+                      >
+                        {durationMin}m overlap
+                      </div>
+                    )
+                  })}
+
                   {evts.map((booking, bi) => {
                     const s = timeToMin(booking.start_time)
                     const e = timeToMin(booking.end_time)
@@ -376,7 +400,6 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                     const travelInfo = toAddr ? getTravelInfo(fromAddr, toAddr) : { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
                     const isLast = bi === evts.length - 1
                     const isOpen = popupId === booking.id
-                    const isOverlapping = columnOverlaps.get(col.id)?.has(booking.id) ?? false
 
                     // Return travel info (last event → base)
                     const returnInfo = isLast && toAddr
@@ -439,8 +462,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                           style={{
                             top: yPos(s),
                             height: eventHeight,
-                            backgroundColor: isOverlapping ? '#fee2e2' : col.color + '33',
-                            border: `2px solid ${isOverlapping ? '#ef4444' : col.color}`,
+                            backgroundColor: col.color + '33',
+                            border: `2px solid ${col.color}`,
                             padding: '2px 4px',
                             fontSize: 9,
                           }}
