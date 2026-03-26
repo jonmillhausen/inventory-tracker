@@ -41,6 +41,7 @@ export async function POST(request: Request) {
   if (auth instanceof NextResponse) return auth
 
   const apiKey = process.env.ZENBOOKER_API_KEY
+  console.log('[import] ZENBOOKER_API_KEY defined:', !!apiKey, 'length:', apiKey?.length ?? 0)
   if (!apiKey) {
     return NextResponse.json({ error: 'ZENBOOKER_API_KEY not configured' }, { status: 500 })
   }
@@ -52,6 +53,8 @@ export async function POST(request: Request) {
   const zbUrl = new URL('https://api.zenbooker.com/v1/jobs')
   if (cursor) zbUrl.searchParams.set('cursor', cursor)
 
+  console.log('[import] Fetching:', zbUrl.toString())
+
   let zbResponse: ZenbookerJobsResponse
   try {
     const res = await fetch(zbUrl.toString(), {
@@ -60,14 +63,23 @@ export async function POST(request: Request) {
         'Zenbooker-Version': '2025-09-01',
       },
     })
+    console.log('[import] HTTP status:', res.status, res.statusText)
+    const rawText = await res.text()
+    console.log('[import] Raw response (first 1000 chars):', rawText.slice(0, 1000))
     if (!res.ok) {
-      const text = await res.text()
       return NextResponse.json(
-        { error: `Zenbooker API error: ${res.status} ${text}` },
+        { error: `Zenbooker API error: ${res.status} ${rawText}` },
         { status: 502 }
       )
     }
-    zbResponse = await res.json() as ZenbookerJobsResponse
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(rawText)
+    } catch {
+      return NextResponse.json({ error: `Non-JSON response: ${rawText.slice(0, 200)}` }, { status: 502 })
+    }
+    console.log('[import] Top-level response keys:', Object.keys(parsed as object))
+    zbResponse = parsed as ZenbookerJobsResponse
   } catch (err) {
     return NextResponse.json(
       { error: `Failed to fetch from Zenbooker: ${String(err)}` },
