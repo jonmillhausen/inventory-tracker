@@ -21,6 +21,7 @@ const BASE_BOOKING: BookingRow = {
   source: 'manual',
   address: '123 Main St',
   notes: '',
+  linked_booking_id: null,
   created_at: '2026-03-01T00:00:00Z',
   updated_at: '2026-03-01T00:00:00Z',
 }

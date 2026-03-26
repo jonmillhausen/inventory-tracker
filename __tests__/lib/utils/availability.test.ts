@@ -40,6 +40,7 @@ const makeBooking = (overrides: Partial<BookingRow> = {}): BookingRow => ({
   source: 'webhook' as BookingSource,
   address: '123 Main St',
   notes: '',
+  linked_booking_id: null,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
   ...overrides,

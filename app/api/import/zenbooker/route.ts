@@ -467,13 +467,53 @@ export async function POST(request: Request) {
         // Clear any stale booking_items (no equipment for these event types)
         await supabase.from('booking_items').delete().eq('booking_id', booking.id)
 
+        // ── Link to matching drop-off booking ─────────────────────────────
+        // Find the most recent drop-off or coordinated booking at the same
+        // address on or before the pickup date, then set linked_booking_id on
+        // both rows bidirectionally.  If the drop-off is already linked to a
+        // different pickup, flag this booking as needs_review instead.
+        let linkDetail = `${eventType}: imported with no equipment`
+        if (eventDate) {
+          const { data: matchingDropoff } = await supabase
+            .from('bookings')
+            .select('id, linked_booking_id')
+            .eq('address', address)
+            .in('event_type', ['dropoff', 'coordinated'])
+            .lte('event_date', eventDate)
+            .order('event_date', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (matchingDropoff) {
+            if (matchingDropoff.linked_booking_id) {
+              // Already linked to a different pickup — flag for review
+              await supabase
+                .from('bookings')
+                .update({ status: 'needs_review' })
+                .eq('id', booking.id)
+              linkDetail += '; flagged needs_review: drop-off already linked'
+            } else {
+              // Bidirectional link
+              await supabase
+                .from('bookings')
+                .update({ linked_booking_id: booking.id })
+                .eq('id', matchingDropoff.id)
+              await supabase
+                .from('bookings')
+                .update({ linked_booking_id: matchingDropoff.id })
+                .eq('id', booking.id)
+              linkDetail += `; linked to drop-off ${matchingDropoff.id}`
+            }
+          }
+        }
+
         await supabase.from('webhook_logs').insert({
           received_at:      new Date().toISOString(),
           zenbooker_job_id: jobId,
           action:           'job.import',
           raw_payload:      job as unknown as Record<string, unknown>,
           result:           'success',
-          result_detail:    `${eventType}: imported with no equipment`,
+          result_detail:    linkDetail,
           booking_id:       booking.id,
         })
 

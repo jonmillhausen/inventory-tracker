@@ -154,6 +154,7 @@ export interface Database {
           source: BookingSource
           address: string
           notes: string
+          linked_booking_id: string | null
           created_at: string
           updated_at: string
         }
@@ -170,6 +171,7 @@ export interface Database {
           source: BookingSource
           address: string
           notes: string
+          linked_booking_id?: string | null
         }
         Update: Partial<{
           customer_name: string
@@ -182,6 +184,7 @@ export interface Database {
           event_type: EventType
           address: string
           notes: string
+          linked_booking_id: string | null
         }>
         Relationships: []
       }

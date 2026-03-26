@@ -44,9 +44,40 @@ export type ChainBooking = {
 
 const INACTIVE_STATUSES: BookingStatus[] = ['canceled']
 
-export function isBookingActiveOnDate(booking: BookingRow, date: string): boolean {
+// PICKUP event types — the far end of a linked drop-off/pickup span.
+const PICKUP_EVENT_TYPES = new Set<string>(['pickup', 'arena_pickup'])
+
+/**
+ * Returns true if the booking should count against availability on the given
+ * date (YYYY-MM-DD).
+ *
+ * When a bookingsById map is provided, drop-off bookings that are linked to a
+ * pickup/arena_pickup booking have their effective date range extended from
+ * their own event_date through the linked pickup's event_date.  This ensures
+ * that equipment loaned for a multi-day period (e.g. drop-off 4/1, pickup 4/3)
+ * is correctly shown as blocked on the intermediate day 4/2.
+ *
+ * Time-precision note: edge days (drop-off day and pickup day) are treated as
+ * fully blocked.  Sub-day time-window checking would require a queryTime
+ * parameter and is a future enhancement.
+ */
+export function isBookingActiveOnDate(
+  booking: BookingRow,
+  date: string,
+  bookingsById?: Map<string, BookingRow>,
+): boolean {
   if (INACTIVE_STATUSES.includes(booking.status)) return false
   if (!booking.event_date) return false
+
+  // If this booking is linked to a pickup, span the active range to the
+  // pickup's event_date so intermediate days are correctly blocked.
+  if (booking.linked_booking_id && bookingsById) {
+    const linked = bookingsById.get(booking.linked_booking_id)
+    if (linked?.event_date && PICKUP_EVENT_TYPES.has(linked.event_type)) {
+      return booking.event_date <= date && date <= linked.event_date
+    }
+  }
+
   const end = booking.end_date ?? booking.event_date
   return booking.event_date <= date && date <= end
 }
@@ -58,10 +89,12 @@ export function calculateAvailability(
   bookingItems: BookingItemRow[],
   date: string
 ): AvailabilityRow[] {
+  const bookingsById = new Map(bookings.map(b => [b.id, b]))
+
   // Build map from booking.id → booking.chain for active bookings
   const bookingChain = new Map<string, string | null>()
   for (const b of bookings) {
-    if (isBookingActiveOnDate(b, date)) {
+    if (isBookingActiveOnDate(b, date, bookingsById)) {
       bookingChain.set(b.id, b.chain)
     }
   }
@@ -164,9 +197,10 @@ export function computeChainTimes(
   date: string
 ): Record<string, { start: string; end: string }> {
   const result: Record<string, { start: string; end: string }> = {}
+  const bookingsById = new Map(bookings.map(b => [b.id, b]))
 
   for (const b of bookings) {
-    if (!isBookingActiveOnDate(b, date)) continue
+    if (!isBookingActiveOnDate(b, date, bookingsById)) continue
     if (!b.chain || b.chain === 'Unassigned') continue
 
     if (!result[b.chain]) {
@@ -186,7 +220,8 @@ export function computeStats(
   bookings: BookingRow[],
   date: string
 ): { events: number; chains: number; soldOut: number; overbooked: number; low: number } {
-  const activeBookings = bookings.filter(b => isBookingActiveOnDate(b, date))
+  const bookingsById = new Map(bookings.map(b => [b.id, b]))
+  const activeBookings = bookings.filter(b => isBookingActiveOnDate(b, date, bookingsById))
   const events = activeBookings.length
 
   const chainNames = new Set<string>()
@@ -211,8 +246,9 @@ export function getChainBookings(
   date: string,
   chain: string  // 'Unassigned' means chain IS null
 ): ChainBooking[] {
+  const bookingsById = new Map(bookings.map(b => [b.id, b]))
   const filtered = bookings.filter(b => {
-    if (!isBookingActiveOnDate(b, date)) return false
+    if (!isBookingActiveOnDate(b, date, bookingsById)) return false
     if (chain === 'Unassigned') {
       return b.chain === null || b.chain === 'Unassigned'
     }
