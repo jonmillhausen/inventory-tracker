@@ -178,8 +178,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     <td className="px-4 py-3 text-center">
                       {e.out_of_service > 0 ? (
                         <Badge variant="destructive">{e.out_of_service}</Badge>
-                      ) : (!isExpanded && subStatus?.hasDamage) ? (
-                        <X size={14} className="text-red-400 mx-auto" />
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -189,8 +187,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                             {e.issue_flag}
                           </Badge>
                         </button>
-                      ) : (!isExpanded && subStatus?.hasFlags) ? (
-                        <Flag size={14} className="text-orange-400 mx-auto" />
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3">
@@ -220,7 +216,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                   {/* Supplies toggle row */}
                   {subs.length > 0 && (
                     <tr className="bg-gray-50/30">
-                      <td colSpan={6} className="px-4 py-1">
+                      <td className="px-4 py-1" colSpan={3}>
                         <button
                           onClick={() => toggleParent(e.id)}
                           className="flex items-center gap-1 text-xs text-gray-500 font-semibold hover:text-gray-700"
@@ -229,6 +225,17 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           {e.name} Supplies ({subs.length})
                         </button>
                       </td>
+                      <td className="px-4 py-1 text-center">
+                        {!isExpanded && subStatus?.hasDamage
+                          ? <X size={14} className="text-red-400 mx-auto" />
+                          : ''}
+                      </td>
+                      <td className="px-4 py-1 text-center">
+                        {!isExpanded && subStatus?.hasFlags
+                          ? <Flag size={14} className="text-orange-400 mx-auto" />
+                          : ''}
+                      </td>
+                      <td />
                     </tr>
                   )}
 
