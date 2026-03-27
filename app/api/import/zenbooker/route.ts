@@ -89,7 +89,6 @@ const ADMIN_SERVICE_NAMES_EXACT = new Set([
   'booking adj',
   'large van unavailable',
   'late night surcharge',
-  'detailed late night pick-up',
   'setup fee',
   'set up/break down',
   'event staffing',
@@ -136,6 +135,12 @@ function isAdminServiceName(name: string): boolean {
   if (nl.includes('set up/break down')) return true
   // ABA Autism Event — one-off promo entry incorrectly assigned to staff
   if (nl.includes('aba autism event')) return true
+  // "Detailed late night pick-up (10 pm to 11 pm), 272.50 in credit" and variants
+  if (nl.startsWith('detailed late night pick-up')) return true
+  // "Table plus table cover" — logistics add-on on lawn game services
+  if (nl.includes('table plus table cover')) return true
+  // "Full Game Setup" — logistics add-on on bundle services, not tracked equipment
+  if (nl.includes('full game setup')) return true
   // Specific one-off skips confirmed by owner
   if (nl.includes('5 laser tag sets for 2 hours')) return true
   if (nl.includes('tifiny mcdonald')) return true
