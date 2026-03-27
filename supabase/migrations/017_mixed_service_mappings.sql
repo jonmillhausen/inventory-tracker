@@ -36,7 +36,7 @@ INSERT INTO service_mappings (
   uuid_generate_v4(),
   'v1:bubble_ball_bulk', 'Bubble Balls (with staff note)',
   'v1_bubble_bulk', 'Bubble Balls',
-  'bubble_ball', 8, true, false,
+  'bubbleball', 8, true, false,
   'v1 synthetic: qty from service name prefix ("8 BubbleBalls for 2 hours...")'
 )
 ON CONFLICT DO NOTHING;

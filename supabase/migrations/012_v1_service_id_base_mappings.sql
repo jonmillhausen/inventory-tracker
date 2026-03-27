@@ -31,6 +31,6 @@ INSERT INTO service_mappings (
   '1747439051481x330563883501879300',
   'Bubble Ball',
   NULL, NULL,
-  'bubble_ball', 1, true, false,
+  'bubbleball', 1, true, false,
   'v1 service_id — qty comes from service option quantity field'
 ) ON CONFLICT DO NOTHING;
