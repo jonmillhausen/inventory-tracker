@@ -83,23 +83,29 @@ const OBSTACLE_COURSE_V1_SERVICE_ID = '1749611522093x499322152628127740'
 // Internal admin/logistics service names — exact matches (lowercase).
 // Individual services with these names are silently filtered out.
 // If ALL non-admin services are filtered, no booking is created (isAdminOnly).
+// NOTE: 'generator, set up/break down' is intentionally absent — any service
+// containing 'generator' is routed to equipment mapping (step 0 in loop) first.
 const ADMIN_SERVICE_NAMES_EXACT = new Set([
   'booking adj',
   'large van unavailable',
   'late night surcharge',
   'detailed late night pick-up',
   'setup fee',
-  'generator, set up/break down',
-  '3 additional bottles of foam solution',
-  '3 bottles of extra foam solution',
-  'additional 10 bottles of foam solution',
+  'set up/break down',
   'event staffing',
   'event details',
+  'staffing',
+  'on site staff for 4 hours',
+  'staff oversight for lawn games',
+  'staff to run lawn games',
+  'staff to run',
 ])
 
 /**
- * Returns true for service names that are internal annotations, fees, or
- * logistics notes — no booking or equipment should be created.
+ * Returns true for service names that are internal annotations, fees,
+ * consumables, or logistics notes — no booking or equipment should be created.
+ * NOTE: generator-containing names are checked BEFORE this function is called
+ * so they are never dropped here.
  */
 function isAdminServiceName(name: string): boolean {
   const nl = name.toLowerCase()
@@ -111,6 +117,19 @@ function isAdminServiceName(name: string): boolean {
   if (/^pick-?up\s+\d/i.test(nl)) return true
   // "BRING …" — internal staff delivery/prep notes
   if (nl.startsWith('bring ')) return true
+  // Foam bottles / foam solution — consumable, not tracked equipment
+  if (nl.includes('foam solution')) return true
+  // Pickup travel/convenience fees
+  if (nl.includes('pick-up travel fee') || nl.includes('pick-up fee')) return true
+  // Refunds (e.g. "Refund of deposit")
+  if (nl.includes('refund of')) return true
+  // Time-window pickup logistics (e.g. "6 pm Pick-up window")
+  if (nl.includes('pick-up window')) return true
+  // "Set Up/Break Down" as a substring (catches "Generator, Set Up/Break Down"
+  // only if generator check above didn't fire — practically never, but safe)
+  if (nl.includes('set up/break down')) return true
+  // ABA Autism Event — one-off promo entry incorrectly assigned to staff
+  if (nl.includes('aba autism event')) return true
   return false
 }
 
@@ -119,10 +138,13 @@ function isAdminServiceName(name: string): boolean {
 const PROMO_SERVICE_PATTERNS = [
   'promo event',
   'promo booth',
-  'tailgoat promo',
+  'tailgoat',              // catches 'TailGOAT', 'Jimmy\'s Seafood TailGOAT', etc.
   'polar plunge promo',
   'promo tent',
   'promo supplies',
+  'promo materials',
+  'tent + promo',
+  '2 hour staff supervised event',
 ]
 
 // Pickup-type service name substrings — entire job imports as event_type='pickup',
@@ -131,6 +153,7 @@ const PICKUP_SERVICE_PATTERNS = [
   'lawn game pickup',
   'lawn game pick-up',
   'lawn games pick-up',
+  'lawn game return',
   'standard pick-up',
 ]
 
@@ -222,6 +245,9 @@ function parseV1Job(job: V1Job): ParsedJob {
 
   // ── Service normalization ──────────────────────────────────────────────
   // Priority order for each service:
+  //   0. Generator        → MUST come first (before admin skip) so that
+  //                         "Generator, Set Up/Break Down" maps equipment
+  //   0b. Bluetooth Speaker → same rationale
   //   1. Admin/logistics  → skip silently (no booking item, no fallback)
   //   2. Pickup by name   → set isPickupJob / isArenaPickupJob flag, skip
   //   3. Promo events     → synthetic 'v1:promo_event' service_id
@@ -234,13 +260,36 @@ function parseV1Job(job: V1Job): ParsedJob {
   //  10. Generic path     → service_fields options + pricing_summary fallback
 
   let hadServices = false   // at least one non-admin service existed in the payload
-  let isPickupJob     = false
+  let isPickupJob      = false
   let isArenaPickupJob = false
   const services: ZenbookerService[] = []
 
   for (const svc of job.services ?? []) {
     const svcName = svc.service_name ?? svc.name ?? ''
     const nameLower = svcName.toLowerCase()
+
+    // 0. Generator — checked before admin skip so "Generator, Set Up/Break Down"
+    //    maps equipment rather than being dropped by the set up/break down pattern.
+    if (nameLower.includes('generator')) {
+      hadServices = true
+      services.push({
+        service_id:         'v1:generator',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 0b. Bluetooth Speaker (e.g. "BlueTooth Speaker", "Bluetooth speaker rental")
+    if (nameLower.includes('speaker') || nameLower.includes('bluetooth')) {
+      hadServices = true
+      services.push({
+        service_id:         'v1:bluetooth_speaker',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
 
     // 1. Admin/logistics — filter silently
     if (isAdminServiceName(svcName)) continue
