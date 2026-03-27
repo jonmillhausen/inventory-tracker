@@ -38,7 +38,7 @@ export default function AuthConfirmPage() {
 
     // Case 2: Implicit flow — token delivered as hash fragment (#access_token=...)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
+      if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session) {
         setStage('set-password')
       }
     })
@@ -51,7 +51,15 @@ export default function AuthConfirmPage() {
         }
         return prev
       })
-    }, 5000)
+    }, 10000)
+
+    // In case the auth event already fired before the listener was registered
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setStage('set-password')
+        clearTimeout(timeout)
+      }
+    })
 
     return () => {
       subscription.unsubscribe()
