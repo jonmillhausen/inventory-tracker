@@ -23,9 +23,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'User has no email address' }, { status: 400 })
   }
 
-  console.log('[resend-invite] calling generateLink magiclink for', user.email)
+  console.log('[resend-invite] calling generateLink recovery for', user.email)
   const { error: linkErr } = await adminSupabase.auth.admin.generateLink({
-    type: 'magiclink',
+    type: 'recovery',
     email: user.email,
   })
   if (linkErr) {

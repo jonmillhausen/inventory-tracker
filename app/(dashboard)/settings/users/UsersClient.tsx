@@ -66,7 +66,7 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
 
   function handleResendInvite(user: UserRow) {
     resendInvite.mutate(user.id, {
-      onSuccess: () => setToast({ type: 'success', message: `Login link sent to ${user.full_name}` }),
+      onSuccess: () => setToast({ type: 'success', message: `Password setup email sent to ${user.full_name}` }),
       onError: (err) => setToast({ type: 'error', message: err.message }),
     })
   }
