@@ -63,6 +63,7 @@ export const DELIVERY_SERVICES = new Set([
   'Foam Party - Drop-Off',
   'Party Pack Bundle',
   'Big Bash Bundle',
+  'Big Bash Bundle Package - Drop-Off',
 ])
 
 /**

@@ -108,7 +108,7 @@ const ADMIN_SERVICE_NAMES_EXACT = new Set([
  * so they are never dropped here.
  */
 function isAdminServiceName(name: string): boolean {
-  const nl = name.toLowerCase()
+  const nl = name.trim().toLowerCase()
   if (ADMIN_SERVICE_NAMES_EXACT.has(nl)) return true
   // "Additional N minutes rental time charge" and similar duration-extension fees
   if (/additional\s+\d+\s+minutes/i.test(nl)) return true
@@ -121,8 +121,12 @@ function isAdminServiceName(name: string): boolean {
   if (nl.includes('foam solution')) return true
   // Pickup travel/convenience fees
   if (nl.includes('pick-up travel fee') || nl.includes('pick-up fee')) return true
-  // Refunds (e.g. "Refund of deposit")
-  if (nl.includes('refund of')) return true
+  // Refunds
+  if (nl.includes('refund of') || nl.includes('refund issued by stripe')) return true
+  // Holiday surcharges
+  if (nl.includes('holiday surcharge')) return true
+  // Booking adjustments (catches "Booking adjustment" in addition to exact "booking adj")
+  if (nl.includes('booking adjustment')) return true
   // Time-window pickup logistics (e.g. "6 pm Pick-up window")
   if (nl.includes('pick-up window')) return true
   // "Set Up/Break Down" as a substring (catches "Generator, Set Up/Break Down"
@@ -130,6 +134,9 @@ function isAdminServiceName(name: string): boolean {
   if (nl.includes('set up/break down')) return true
   // ABA Autism Event — one-off promo entry incorrectly assigned to staff
   if (nl.includes('aba autism event')) return true
+  // Specific one-off skips confirmed by owner
+  if (nl.includes('5 laser tag sets for 2 hours')) return true
+  if (nl.includes('tifiny mcdonald')) return true
   return false
 }
 
@@ -160,6 +167,7 @@ const PICKUP_SERVICE_PATTERNS = [
 // Arena-pickup service name substrings — imports as event_type='arena_pickup'.
 const ARENA_PICKUP_SERVICE_PATTERNS = [
   'pick-up at wonderfly arena',
+  'return to wonderfly arena',
 ]
 
 // ── Time helpers ──────────────────────────────────────────────────────────
@@ -245,19 +253,25 @@ function parseV1Job(job: V1Job): ParsedJob {
 
   // ── Service normalization ──────────────────────────────────────────────
   // Priority order for each service:
-  //   0. Generator        → MUST come first (before admin skip) so that
-  //                         "Generator, Set Up/Break Down" maps equipment
+  //   0.  Generator        → MUST come first (before admin skip) so that
+  //                          "Generator, Set Up/Break Down" maps equipment
   //   0b. Bluetooth Speaker → same rationale
-  //   1. Admin/logistics  → skip silently (no booking item, no fallback)
-  //   2. Pickup by name   → set isPickupJob / isArenaPickupJob flag, skip
-  //   3. Promo events     → synthetic 'v1:promo_event' service_id
-  //   4. Gaga Pit         → synthetic 'v1:gaga_pit' service_id
-  //   5. Laser Tag v1     → synthetic modifier options for Elite / Lite variant
-  //   6. Water Tag        → synthetic 'v1:water_tag' service_id with extracted qty
-  //   7. Water Guns       → synthetic 'v1:water_guns' service_id with extracted qty
-  //   8. Arena LT Rental  → synthetic 'v1:arena_laser_tag' service_id with extracted qty
-  //   9. Lawn Games v1    → skip if no priced options
-  //  10. Generic path     → service_fields options + pricing_summary fallback
+  //   1.  Admin/logistics  → skip silently (no booking item, no fallback)
+  //   2.  Pickup by name   → set isPickupJob / isArenaPickupJob flag, skip
+  //   3.  Promo events     → synthetic 'v1:promo_event' service_id
+  //   4.  Gaga Pit         → synthetic 'v1:gaga_pit' service_id
+  //   5.  Laser Tag v1     → synthetic modifier options for Elite / Lite variant
+  //   5b. LT + Dart combo  → synthetic 'v1:lt_and_dart'
+  //   5c. Jenga + C4 combo → synthetic 'v1:multi_lawn_game'
+  //   5d. Bubble Balls     → synthetic 'v1:bubble_ball_bulk' with extracted qty
+  //   5e. Hoverball        → synthetic 'v1:hoverball'
+  //   5f. Velcro Dart      → synthetic 'v1:dart_board_internal'
+  //   5g. Laser Tag (internal arena) → synthetic 'v1:laser_tag_internal'
+  //   6.  Water Tag        → synthetic 'v1:water_tag' with extracted qty
+  //   7.  Water Guns       → synthetic 'v1:water_guns' with extracted qty
+  //   8.  Arena LT Rental  → synthetic 'v1:arena_laser_tag' with extracted qty
+  //   9.  Lawn Games v1    → skip if no priced options
+  //  10.  Generic path     → service_fields options + pricing_summary fallback
 
   let hadServices = false   // at least one non-admin service existed in the payload
   let isPickupJob      = false
@@ -356,6 +370,79 @@ function parseV1Job(job: V1Job): ParsedJob {
           service_selections: [{ selected_options: syntheticOptions }],
         })
       }
+      continue
+    }
+
+    // 5b. Laser Tag + Dart Board combined (must come before 5f and 5g)
+    //     e.g. "Laser Tag and Giant Velcro Dart Board for Lindsay Frankel"
+    if (nameLower.includes('laser tag') &&
+        (nameLower.includes('dart board') || nameLower.includes('dartboard'))) {
+      services.push({
+        service_id:         'v1:lt_and_dart',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 5c. Giant Jenga + Connect 4 combined
+    //     e.g. "Giant Jenga, Giant Connect 4, Table plus table cover"
+    if (nameLower.includes('giant jenga') &&
+        (nameLower.includes('giant connect 4') || nameLower.includes('connect 4'))) {
+      services.push({
+        service_id:         'v1:multi_lawn_game',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 5d. Bubble Balls with qty in service name
+    //     e.g. "8 BubbleBalls for 2 hours, Additional staff set up time (15 minutes)"
+    if (nameLower.includes('bubbleball') || nameLower.includes('bubble ball')) {
+      const qtyMatch = svcName.match(/^(\d+)\s+bubb/i)
+      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+      services.push({
+        service_id:         'v1:bubble_ball_bulk',
+        service_name:       svcName,
+        service_selections: [{ selected_options: [{ id: 'v1_bubble_bulk', text: svcName, quantity: qty }] }],
+      })
+      continue
+    }
+
+    // 5e. Hoverball Archery Range
+    if (nameLower.includes('hoverball')) {
+      services.push({
+        service_id:         'v1:hoverball',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 5f. Velcro Dart / Dart Board (standalone internal booking)
+    //     e.g. "Giant Velcro Dartboard in use at Arbutus"
+    //     Combined LT+dart is caught by 5b above.
+    if (nameLower.includes('velcro dart') || nameLower.includes('dart board')) {
+      services.push({
+        service_id:         'v1:dart_board_internal',
+        service_name:       svcName,
+        service_selections: [],
+      })
+      continue
+    }
+
+    // 5g. Laser Tag person-named internal arena bookings
+    //     e.g. "Laser Tag for Andrea Hawkins", "Laser Tag - Leslie Ogu"
+    //     Does NOT match: standard Laser Tag (caught by step 5 via service_id),
+    //     Arena Laser Tag Rental (excluded by 'laser tag rental' check),
+    //     combined LT+dart (caught by 5b), "5 Laser Tag sets" (skipped in step 1).
+    if (nameLower.includes('laser tag') && !nameLower.includes('laser tag rental')) {
+      services.push({
+        service_id:         'v1:laser_tag_internal',
+        service_name:       svcName,
+        service_selections: [],
+      })
       continue
     }
 
