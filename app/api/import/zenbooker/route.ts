@@ -625,9 +625,10 @@ function parseV1Job(job: V1Job): ParsedJob {
     const hasRealOptions = sfSelections.some(sel => (sel.selected_options?.length ?? 0) > 0)
 
     // Fallback: when service_fields is absent or empty, some v1 services surface
-    // selected options only in pricing_summary[]. Parse "Nx Description" entries
-    // from there as synthetic options with id='' — resolveWebhookItems handles
-    // them via name-based modifier matching instead of ID-based matching.
+    // selected options only in pricing_summary[]. Parse quantity prefixes:
+    //   "Nx Description"  (e.g. "3x Standard Cornhole" → qty=3)
+    //   "N Bubbles/Bubble Balls" (old Bubble Ball format without "x" separator)
+    // Duration entries like "1 Hour" are NOT matched by the bubble-specific path.
     const psSelections =
       !hasRealOptions && (svc.pricing_summary?.length ?? 0) > 0
         ? [{
@@ -635,26 +636,20 @@ function parseV1Job(job: V1Job): ParsedJob {
               .filter(ps => ps.type === 'service_option' && ps.description)
               .map(ps => {
                 const desc = ps.description!
-                // Parse optional "Nx " prefix (e.g. "3x Standard Cornhole" → qty=3)
-                const qtyMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
-                return {
-                  id:       '',   // synthetic — no Zenbooker modifier ID
-                  text:     qtyMatch ? qtyMatch[2].trim() : desc,
-                  quantity: qtyMatch ? parseInt(qtyMatch[1], 10) : 1,
-                  price:    ps.amount !== undefined ? Number(ps.amount) : undefined,
+                // Standard "Nx " prefix (e.g. "3x Standard Cornhole")
+                const nxMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
+                if (nxMatch) {
+                  return { id: '', text: nxMatch[2].trim(), quantity: parseInt(nxMatch[1], 10), price: ps.amount !== undefined ? Number(ps.amount) : undefined }
                 }
+                // Bubble Ball old format: "10 Bubbles" or "10 Bubble Balls" (space, no x)
+                const bubbleMatch = /bubble/i.test(desc) ? desc.match(/^(\d+)\s+(.+)$/i) : null
+                if (bubbleMatch) {
+                  return { id: '', text: bubbleMatch[2].trim(), quantity: parseInt(bubbleMatch[1], 10), price: ps.amount !== undefined ? Number(ps.amount) : undefined }
+                }
+                return { id: '', text: desc, quantity: 1, price: ps.amount !== undefined ? Number(ps.amount) : undefined }
               }),
           }]
         : []
-
-    // [TEMP DEBUG] Full picture for Bubble Ball qty diagnosis
-    if (svc.service_id === '1747439051481x330563883501879300') {
-      const allOpts = [...sfSelections, ...psSelections].flatMap(s => s.selected_options ?? [])
-      console.log('[BB_QTY_DEBUG] service_name:', svcName)
-      console.log('[BB_QTY_DEBUG] service_fields (raw):', JSON.stringify(svc.service_fields ?? []))
-      console.log('[BB_QTY_DEBUG] pricing_summary (raw):', JSON.stringify(svc.pricing_summary ?? []))
-      console.log('[BB_QTY_DEBUG] resolved options pushed:', JSON.stringify(allOpts.map(o => ({ id: o.id, text: o.text, qty: o.quantity }))))
-    }
 
     services.push({
       service_id:         svc.service_id ?? '',
