@@ -41,6 +41,32 @@ export type InviteUserInput = {
   role: string
 }
 
+export function useResendInvite() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/users/${id}/resend-invite`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? 'Failed to resend invite')
+      }
+    },
+  })
+}
+
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error((err as { error?: string }).error ?? 'Failed to delete user')
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: USERS_KEY }),
+  })
+}
+
 export function useInviteUser() {
   const queryClient = useQueryClient()
   return useMutation({
