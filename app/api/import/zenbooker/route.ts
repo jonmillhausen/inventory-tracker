@@ -141,6 +141,8 @@ function isAdminServiceName(name: string): boolean {
   if (nl.includes('table plus table cover')) return true
   // "Full Game Setup" — logistics add-on on bundle services, not tracked equipment
   if (nl.includes('full game setup')) return true
+  // Credit fragments produced by comma-split of fees (e.g. "272.50 in credit")
+  if (nl.includes('in credit')) return true
   // Specific one-off skips confirmed by owner
   if (nl.includes('5 laser tag sets for 2 hours')) return true
   if (nl.includes('tifiny mcdonald')) return true
@@ -285,7 +287,56 @@ function parseV1Job(job: V1Job): ParsedJob {
   let isArenaPickupJob = false
   const services: ZenbookerService[] = []
 
-  for (const svc of job.services ?? []) {
+  // ── Multi-service pre-pass ───────────────────────────────────────────────
+  // The v1 API sends as separate service entries what the UI shows as a single
+  // combined name (e.g. "Giant Jenga, Giant Connect 4, Table plus table cover"
+  // → 3 entries; "Laser Tag and Giant Velcro Dart Board for …" → 2 entries).
+  // Join all names first and run combined pattern checks before any per-service
+  // logic so patterns that span multiple entries are still detected correctly.
+  const allSvcEntries = job.services ?? []
+  const joinedLower = allSvcEntries.map(s => (s.service_name ?? s.name ?? '').toLowerCase()).join(', ')
+  const consumed = new Set<number>()
+
+  // 5b pre-pass: Laser Tag + Dart Board combined
+  if (
+    joinedLower.includes('laser tag') &&
+    (joinedLower.includes('dart board') || joinedLower.includes('dartboard'))
+  ) {
+    // Don't consume if a standard Laser Tag service (with Elite/Lite pricing_summary)
+    // is present — those must be processed individually to preserve qty data.
+    const hasEliteLite = allSvcEntries.some(s =>
+      s.service_id === LASER_TAG_V1_SERVICE_ID &&
+      (s.pricing_summary ?? []).some(
+        ps => ps.type === 'service_option' && (ps.amount ?? 0) > 0 && ps.description &&
+          (ps.description.toLowerCase().includes('elite laser tag') ||
+           ps.description.toLowerCase().includes('laser tag lite'))
+      )
+    )
+    if (!hasEliteLite) {
+      const combinedName = allSvcEntries.map(s => s.service_name ?? s.name ?? '').join(', ')
+      services.push({ service_id: 'v1:lt_and_dart', service_name: combinedName, service_selections: [] })
+      hadServices = true
+      allSvcEntries.forEach((s, i) => {
+        const nl = (s.service_name ?? s.name ?? '').toLowerCase()
+        if (nl.includes('laser tag') || nl.includes('dart board') || nl.includes('dartboard')) consumed.add(i)
+      })
+    }
+  }
+
+  // 5c pre-pass: Giant Jenga + Connect 4 combined
+  if (joinedLower.includes('giant jenga') && joinedLower.includes('connect 4')) {
+    const combinedName = allSvcEntries.map(s => s.service_name ?? s.name ?? '').join(', ')
+    services.push({ service_id: 'v1:multi_lawn_game', service_name: combinedName, service_selections: [] })
+    hadServices = true
+    allSvcEntries.forEach((s, i) => {
+      const nl = (s.service_name ?? s.name ?? '').toLowerCase()
+      if (nl.includes('giant jenga') || nl.includes('connect 4') || nl.includes('table plus table cover')) consumed.add(i)
+    })
+  }
+
+  for (const [svcIdx, svc] of allSvcEntries.entries()) {
+    if (consumed.has(svcIdx)) continue
+
     const svcName = svc.service_name ?? svc.name ?? ''
     const nameLower = svcName.toLowerCase()
 
@@ -507,6 +558,19 @@ function parseV1Job(job: V1Job): ParsedJob {
         service_id:         'v1:arena_laser_tag',
         service_name:       svcName,
         service_selections: [{ selected_options: [{ id: 'v1_arena_lt', text: svcName, quantity: qty }] }],
+      })
+      continue
+    }
+
+    // 8.5. Big Bash Bundle Package - Drop-Off (v1)
+    //      Route to synthetic ID so the is_skip base mapping in service_mappings
+    //      suppresses unmapped_service when no game option IDs are known yet.
+    //      Service is in DELIVERY_SERVICES → resolveEventType returns 'dropoff'.
+    if (nameLower.includes('big bash bundle package')) {
+      services.push({
+        service_id:         'v1:big_bash_bundle_package',
+        service_name:       svcName,
+        service_selections: [],
       })
       continue
     }
