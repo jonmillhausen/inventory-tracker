@@ -385,13 +385,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                   </span>
                 </div>
               ))}
-              {HOURS.map(h => (
-                <div
-                  key={'line' + h}
-                  className="absolute left-0 right-0 border-b border-gray-100"
-                  style={{ top: yPos(h * 60), height: 0 }}
-                />
-              ))}
+              {/* No grid lines here — chain columns draw their own lines */}
             </div>
 
             {/* Chain columns */}
@@ -529,7 +523,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                         {isOpen && (
                           <div
                             onClick={ev => ev.stopPropagation()}
-                            className="absolute left-0 right-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg"
+                            className="absolute left-0 right-0 z-50 bg-white border border-gray-200 rounded-md shadow-lg text-gray-900"
                             style={{
                               top: yPos(s) + eventHeight + 4,
                               padding: 10,
@@ -538,7 +532,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                           >
                             <div className="flex items-start justify-between mb-1.5">
                               <div>
-                                <div className="font-bold" style={{ fontSize: 12 }}>
+                                <div className="font-bold text-gray-900" style={{ fontSize: 12 }}>
                                   {booking.customer_name || 'Unnamed'}
                                 </div>
                                 {booking.zenbooker_job_id && (
@@ -575,7 +569,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                                   Equipment
                                 </div>
                                 {items.map((item, i) => (
-                                  <div key={i} style={{ fontSize: 10, padding: '1px 0' }}>
+                                  <div key={i} className="text-gray-900" style={{ fontSize: 10, padding: '1px 0' }}>
                                     <span className="font-semibold mr-1">×{item.qty}</span>
                                     <span>{equipmentMap.get(item.item_id)?.name ?? item.item_id}</span>
                                   </div>
