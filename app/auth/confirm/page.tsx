@@ -18,15 +18,31 @@ export default function AuthConfirmPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    // Supabase JS automatically detects and exchanges the #access_token hash
-    // on page load. Listen for the resulting SIGNED_IN event.
+    // Case 1: PKCE flow — token delivered as query params
+    const params = new URLSearchParams(window.location.search)
+    const token_hash = params.get('token_hash')
+    const type = params.get('type') as 'invite' | 'recovery' | null
+
+    if (token_hash && type) {
+      supabase.auth.verifyOtp({ token_hash, type })
+        .then(({ error }) => {
+          if (error) {
+            setError(error.message)
+            setStage('error')
+          } else {
+            setStage('set-password')
+          }
+        })
+      return
+    }
+
+    // Case 2: Implicit flow — token delivered as hash fragment (#access_token=...)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setStage('set-password')
       }
     })
 
-    // Fallback: if no auth event fires within 5 seconds, show error
     const timeout = setTimeout(() => {
       setStage(prev => {
         if (prev === 'verifying') {
