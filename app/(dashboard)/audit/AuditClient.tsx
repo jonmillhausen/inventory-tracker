@@ -242,9 +242,9 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
       {/* Legend */}
       <div className="flex items-center gap-5">
         <span className="text-sm font-semibold text-gray-600">KEY:</span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><AlertTriangle size={26} className="text-red-500" /> Overbooked</span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><Clock size={26} className="text-orange-500" /> Overlap</span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><CircleHelp size={26} className="text-gray-400" /> Unassigned</span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><AlertTriangle size={26} className="text-red-500" /> <span className="font-bold">Overbooked</span></span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><Clock size={26} className="text-orange-500" /> <span className="font-bold">Overlap</span></span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500"><CircleHelp size={26} className="text-gray-400" /> <span className="font-bold">Unassigned</span></span>
       </div>
 
       {/* Week 1 */}

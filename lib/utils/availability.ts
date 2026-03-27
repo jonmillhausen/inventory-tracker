@@ -191,23 +191,72 @@ export function calculateAvailability(
     })
 }
 
-// Returns min start_time / max end_time for each chain on the given date
+function getBookingSetupTimes(
+  booking: BookingRow,
+  bookingItems: BookingItemRow[],
+  equipmentMap: Map<string, EquipmentRow>,
+): { before: number; after: number } {
+  const et = booking.event_type
+  if (et === 'willcall' || et === 'arena_pickup') return { before: 0, after: 0 }
+  if (et === 'dropoff') return { before: 15, after: 0 }
+  if (et === 'pickup') return { before: 0, after: 15 }
+  // coordinated: use custom times from equipment, default 45/45
+  const items = bookingItems.filter(bi => bi.booking_id === booking.id)
+  let maxSetup = 0
+  let maxCleanup = 0
+  let hasCustomSetup = false
+  let hasCustomCleanup = false
+  for (const bi of items) {
+    const eq = equipmentMap.get(bi.item_id)
+    if (eq?.custom_setup_min != null) {
+      hasCustomSetup = true
+      maxSetup = Math.max(maxSetup, eq.custom_setup_min)
+    }
+    if (eq?.custom_cleanup_min != null) {
+      hasCustomCleanup = true
+      maxCleanup = Math.max(maxCleanup, eq.custom_cleanup_min)
+    }
+  }
+  return { before: hasCustomSetup ? maxSetup : 45, after: hasCustomCleanup ? maxCleanup : 45 }
+}
+
+function minToTime(min: number): string {
+  const h = Math.floor(min / 60) % 24
+  const m = min % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number)
+  return h * 60 + (m || 0)
+}
+
+// Returns min window_start / max window_end for each chain on the given date,
+// expanded to include setup/cleanup time around each booking.
 export function computeChainTimes(
   bookings: BookingRow[],
-  date: string
+  date: string,
+  bookingItems: BookingItemRow[] = [],
+  equipment: EquipmentRow[] = [],
 ): Record<string, { start: string; end: string }> {
   const result: Record<string, { start: string; end: string }> = {}
   const bookingsById = new Map(bookings.map(b => [b.id, b]))
+  const equipmentMap = new Map(equipment.map(e => [e.id, e]))
 
   for (const b of bookings) {
     if (!isBookingActiveOnDate(b, date, bookingsById)) continue
     if (!b.chain || b.chain === 'Unassigned') continue
+    if (!b.start_time || !b.end_time) continue
+
+    const { before, after } = getBookingSetupTimes(b, bookingItems, equipmentMap)
+    const windowStart = minToTime(Math.max(0, timeToMinutes(b.start_time) - before))
+    const windowEnd = minToTime(timeToMinutes(b.end_time) + after)
 
     if (!result[b.chain]) {
-      result[b.chain] = { start: b.start_time ?? '', end: b.end_time ?? '' }
+      result[b.chain] = { start: windowStart, end: windowEnd }
     } else {
-      if (b.start_time && b.start_time < result[b.chain].start) result[b.chain].start = b.start_time
-      if (b.end_time && b.end_time > result[b.chain].end) result[b.chain].end = b.end_time
+      if (windowStart < result[b.chain].start) result[b.chain].start = windowStart
+      if (windowEnd > result[b.chain].end) result[b.chain].end = windowEnd
     }
   }
 

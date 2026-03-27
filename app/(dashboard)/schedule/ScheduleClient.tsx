@@ -8,7 +8,7 @@ import { useEquipment } from '@/lib/queries/equipment'
 import { isBookingActiveOnDate } from '@/lib/utils/availability'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Truck, MapPin, ExternalLink, X, Clock } from 'lucide-react'
+import { Truck, MapPin, ExternalLink, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Database } from '@/lib/types/database.types'
 import type { BookingsData } from '@/lib/queries/bookings'
 
@@ -102,6 +102,18 @@ async function fetchTravelInfo(from: string, to: string, date: string, time: str
   } catch {
     return { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
   }
+}
+
+function prevDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().split('T')[0]
+}
+
+function nextDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
 }
 
 export function ScheduleClient({ initialData, initialChains, initialEquipment }: Props) {
@@ -248,8 +260,14 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <h1 className="text-2xl font-bold">Schedule Board</h1>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="schedDate" className="text-sm font-medium">Date</Label>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setSelectedDate(prevDay(selectedDate))}
+              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={14} />
+            </button>
             <Input
               id="schedDate"
               type="date"
@@ -257,6 +275,13 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
               value={selectedDate}
               onChange={e => setSelectedDate(e.target.value)}
             />
+            <button
+              onClick={() => setSelectedDate(nextDay(selectedDate))}
+              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              aria-label="Next day"
+            >
+              <ChevronRight size={14} />
+            </button>
             <button
               onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
               className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"

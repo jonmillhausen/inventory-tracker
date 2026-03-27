@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
@@ -26,6 +26,18 @@ interface Props {
   initialSubItems: SubItemRow[]
   initialBookings: BookingsData
   initialChains: ChainRow[]
+}
+
+function prevDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().split('T')[0]
+}
+
+function nextDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
 }
 
 function chainLabel(name: string): string {
@@ -149,8 +161,8 @@ export function AvailabilityClient({
   )
 
   const chainTimes = useMemo(
-    () => computeChainTimes(bookingsData.bookings, selectedDate),
-    [bookingsData, selectedDate]
+    () => computeChainTimes(bookingsData.bookings, selectedDate, bookingsData.bookingItems, equipment),
+    [bookingsData, selectedDate, equipment]
   )
 
   const stats = useMemo(
@@ -183,18 +195,34 @@ export function AvailabilityClient({
       {/* Header row */}
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-semibold">Availability</h1>
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={e => setSelectedDate(e.target.value)}
-          className="border rounded px-2 py-1 text-sm"
-        />
-        <button
-          onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-          className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
-        >
-          Today
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setSelectedDate(prevDay(selectedDate))}
+            className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+            aria-label="Previous day"
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={e => setSelectedDate(e.target.value)}
+            className="border rounded px-2 py-1 text-sm"
+          />
+          <button
+            onClick={() => setSelectedDate(nextDay(selectedDate))}
+            className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+            aria-label="Next day"
+          >
+            <ChevronRight size={14} />
+          </button>
+          <button
+            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            Today
+          </button>
+        </div>
       </div>
 
       {/* Stat cards */}

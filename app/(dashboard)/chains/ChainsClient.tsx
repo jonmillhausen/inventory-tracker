@@ -10,7 +10,7 @@ import { isBookingActiveOnDate } from '@/lib/utils/availability'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ChevronDown, ChevronUp, ExternalLink, MapPin, Printer, Truck } from 'lucide-react'
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, ExternalLink, MapPin, Printer, Truck } from 'lucide-react'
 import type { Database } from '@/lib/types/database.types'
 import type { BookingsData } from '@/lib/queries/bookings'
 import type { PackingListRow } from '@/lib/utils/packingList'
@@ -251,6 +251,18 @@ function isLightColor(hex: string): boolean {
   return (r * 299 + g * 587 + b * 114) / 1000 > 128
 }
 
+function prevDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() - 1)
+  return d.toISOString().split('T')[0]
+}
+
+function nextDay(date: string): string {
+  const d = new Date(date + 'T00:00:00')
+  d.setDate(d.getDate() + 1)
+  return d.toISOString().split('T')[0]
+}
+
 export function ChainsClient({ initialChains, initialData, initialEquipment, initialSubItems, initialSubItemLinks }: Props) {
   const { data: chains = [] } = useChains(initialChains)
   const { data } = useBookings(initialData)
@@ -364,8 +376,14 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold">Chain Loading</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <Label htmlFor="plDate" className="text-sm font-medium">Date</Label>
+          <div className="flex items-center gap-1 mt-2">
+            <button
+              onClick={() => { setSelectedDate(prevDay(selectedDate)); setCheckedItems(new Set()) }}
+              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              aria-label="Previous day"
+            >
+              <ChevronLeft size={14} />
+            </button>
             <Input
               id="plDate"
               type="date"
@@ -376,6 +394,13 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
                 setCheckedItems(new Set())
               }}
             />
+            <button
+              onClick={() => { setSelectedDate(nextDay(selectedDate)); setCheckedItems(new Set()) }}
+              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              aria-label="Next day"
+            >
+              <ChevronRight size={14} />
+            </button>
             <button
               onClick={() => {
                 setSelectedDate(new Date().toISOString().split('T')[0])

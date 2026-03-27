@@ -457,11 +457,16 @@ function parseV1Job(job: V1Job): ParsedJob {
       continue
     }
 
-    // 5d. Bubble Balls with qty in service name
-    //     e.g. "8 BubbleBalls for 2 hours, Additional staff set up time (15 minutes)"
-    if (nameLower.includes('bubbleball') || nameLower.includes('bubble ball')) {
-      const qtyMatch = svcName.match(/^(\d+)\s+bubb/i)
-      const qty = qtyMatch ? parseInt(qtyMatch[1], 10) : 1
+    // 5d. Bubble Balls bulk — ONLY when a leading numeric qty is present in the name.
+    //     e.g. "8 BubbleBalls for 2 hours" → qty=8 → v1:bubble_ball_bulk modifier path.
+    //     Names without a prefix (e.g. plain "Bubble Ball") fall through to step 10
+    //     (generic path) so the base mapping for the actual v1 service_id fires with
+    //     use_customer_qty=true, picking up qty from the service_fields options.
+    const bubbalQtyMatch = (nameLower.includes('bubbleball') || nameLower.includes('bubble ball'))
+      ? svcName.match(/^(\d+)\s+bubb/i)
+      : null
+    if (bubbalQtyMatch) {
+      const qty = parseInt(bubbalQtyMatch[1], 10)
       services.push({
         service_id:         'v1:bubble_ball_bulk',
         service_name:       svcName,
@@ -587,6 +592,14 @@ function parseV1Job(job: V1Job): ParsedJob {
 
     // 10. Generic path
     // Build selections from service_fields (v1) or service_selections (v3 fallback).
+
+    // [TEMP DEBUG] Log qty data for Bubble Ball v1 service to confirm fix
+    if (svc.service_id === '1747439051481x330563883501879300') {
+      const bbOptions = (svc.service_fields ?? []).flatMap(f => f.selected_options ?? [])
+      console.log('[BB_QTY_DEBUG] service_id:', svc.service_id, 'service_name:', svcName)
+      console.log('[BB_QTY_DEBUG] options:', JSON.stringify(bbOptions.map(o => ({ id: o.id, text: o.text ?? o.name, qty: o.quantity }))))
+    }
+
     const sfSelections = (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
       selected_options: (field.selected_options ?? []).map(opt => ({
         id:       opt.id ?? '',

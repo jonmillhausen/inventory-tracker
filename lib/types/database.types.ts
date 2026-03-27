@@ -14,14 +14,16 @@ export interface Database {
           id: string
           full_name: string
           role: UserRole
+          theme: 'light' | 'dark'
           created_at: string
         }
         Insert: {
           id: string
           full_name: string
           role: UserRole
+          theme?: 'light' | 'dark'
         }
-        Update: Partial<{ full_name: string; role: UserRole }>
+        Update: Partial<{ full_name: string; role: UserRole; theme: 'light' | 'dark' }>
         Relationships: []
       }
       equipment: {
