@@ -112,6 +112,8 @@ function isAdminServiceName(name: string): boolean {
   if (ADMIN_SERVICE_NAMES_EXACT.has(nl)) return true
   // "Additional N minutes rental time charge" and similar duration-extension fees
   if (/additional\s+\d+\s+minutes/i.test(nl)) return true
+  // "Additional staff set up time (15 minutes)" — split across words, not caught by regex above
+  if (nl.includes('additional staff set up time')) return true
   // "Pick-up [time]" — logistics time-window entries, e.g. "Pick-up 7 pm to 9pm same day"
   // Does NOT match "Standard Pick-up" (starts with "Standard") or "Pick-up at Wonderfly Arena"
   if (/^pick-?up\s+\d/i.test(nl)) return true
@@ -369,8 +371,10 @@ function parseV1Job(job: V1Job): ParsedJob {
           service_name:       svcName,
           service_selections: [{ selected_options: syntheticOptions }],
         })
+        continue  // handled — skip steps 5b-5g
       }
-      continue
+      // No Elite/Lite match in pricing_summary — fall through to name-based steps below
+      // (e.g. "Laser Tag for Andrea Hawkins", "Laser Tag and Giant Velcro Dart Board")
     }
 
     // 5b. Laser Tag + Dart Board combined (must come before 5f and 5g)
@@ -428,6 +432,23 @@ function parseV1Job(job: V1Job): ParsedJob {
         service_id:         'v1:dart_board_internal',
         service_name:       svcName,
         service_selections: [],
+      })
+      continue
+    }
+
+    // 5f.5. Laser Tag (GameTruck) — Laser Tag Lite, qty from pricing_summary or default 20.
+    //       Identified by 'gametruck' in the service name.
+    if (nameLower.includes('gametruck')) {
+      let qty = 20
+      for (const ps of svc.pricing_summary ?? []) {
+        if (ps.type !== 'service_option' || !ps.description || (ps.amount ?? 0) <= 0) continue
+        const qtyMatch = ps.description.match(/^(\d+)[x×]/i)
+        if (qtyMatch) { qty = parseInt(qtyMatch[1], 10); break }
+      }
+      services.push({
+        service_id:         'v1:laser_tag_gametruck',
+        service_name:       svcName,
+        service_selections: [{ selected_options: [{ id: 'v1_lt_gametruck', text: svcName, quantity: qty }] }],
       })
       continue
     }
