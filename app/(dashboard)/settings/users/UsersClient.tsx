@@ -151,7 +151,7 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onSelect={() => handleResendInvite(u)}
+                            onClick={() => handleResendInvite(u)}
                             disabled={resendInvite.isPending}
                           >
                             <Mail size={14} />
@@ -160,7 +160,7 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             variant="destructive"
-                            onSelect={() => setDeleteTarget(u)}
+                            onClick={() => setDeleteTarget(u)}
                           >
                             <Trash2 size={14} />
                             Delete User

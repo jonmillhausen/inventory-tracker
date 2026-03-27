@@ -44,9 +44,13 @@ export type InviteUserInput = {
 export function useResendInvite() {
   return useMutation({
     mutationFn: async (id: string) => {
+      console.log('[useResendInvite] fetching', `/api/admin/users/${id}/resend-invite`)
       const res = await fetch(`/api/admin/users/${id}/resend-invite`, { method: 'POST' })
+      console.log('[useResendInvite] response status:', res.status)
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
+        const body = await res.text()
+        console.error('[useResendInvite] error body:', body)
+        const err = (() => { try { return JSON.parse(body) } catch { return {} } })()
         throw new Error((err as { error?: string }).error ?? 'Failed to resend invite')
       }
     },
@@ -57,9 +61,13 @@ export function useDeleteUser() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
+      console.log('[useDeleteUser] fetching', `/api/admin/users/${id}`)
       const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      console.log('[useDeleteUser] response status:', res.status)
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
+        const body = await res.text()
+        console.error('[useDeleteUser] error body:', body)
+        const err = (() => { try { return JSON.parse(body) } catch { return {} } })()
         throw new Error((err as { error?: string }).error ?? 'Failed to delete user')
       }
     },
