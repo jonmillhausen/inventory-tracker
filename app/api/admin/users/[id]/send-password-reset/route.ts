@@ -24,16 +24,15 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'User has no email address' }, { status: 400 })
   }
 
-  console.log('[send-password-reset] calling generateLink recovery for', user.email)
-  const { error: linkErr } = await adminSupabase.auth.admin.generateLink({
-    type: 'recovery',
-    email: user.email,
-    options: { redirectTo: CONFIRM_URL },
-  })
+  console.log('[send-password-reset] calling resetPasswordForEmail for', user.email)
+  const { error: resetErr } = await adminSupabase.auth.resetPasswordForEmail(
+    user.email,
+    { redirectTo: CONFIRM_URL }
+  )
 
-  if (linkErr) {
-    console.error('[send-password-reset] generateLink error:', linkErr.message)
-    return NextResponse.json({ error: linkErr.message }, { status: 400 })
+  if (resetErr) {
+    console.error('[send-password-reset] error:', resetErr.message)
+    return NextResponse.json({ error: resetErr.message }, { status: 400 })
   }
 
   console.log('[send-password-reset] success for', user.email)
