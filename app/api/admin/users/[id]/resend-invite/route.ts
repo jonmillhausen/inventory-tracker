@@ -23,11 +23,14 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'User has no email address' }, { status: 400 })
   }
 
-  console.log('[resend-invite] calling inviteUserByEmail for', user.email)
-  const { error: inviteErr } = await adminSupabase.auth.admin.inviteUserByEmail(user.email)
-  if (inviteErr) {
-    console.error('[resend-invite] inviteUserByEmail error:', inviteErr.message)
-    return NextResponse.json({ error: inviteErr.message }, { status: 400 })
+  console.log('[resend-invite] calling generateLink magiclink for', user.email)
+  const { error: linkErr } = await adminSupabase.auth.admin.generateLink({
+    type: 'magiclink',
+    email: user.email,
+  })
+  if (linkErr) {
+    console.error('[resend-invite] generateLink error:', linkErr.message)
+    return NextResponse.json({ error: linkErr.message }, { status: 400 })
   }
 
   console.log('[resend-invite] success for', user.email)
