@@ -263,7 +263,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
           <div className="flex items-center gap-1">
             <button
               onClick={() => setSelectedDate(prevDay(selectedDate))}
-              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
               aria-label="Previous day"
             >
               <ChevronLeft size={14} />
@@ -277,21 +277,21 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
             />
             <button
               onClick={() => setSelectedDate(nextDay(selectedDate))}
-              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
               aria-label="Next day"
             >
               <ChevronRight size={14} />
             </button>
             <button
               onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-              className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+              className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Today
             </button>
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showTravel}
@@ -300,7 +300,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
             />
             Travel Time
           </label>
-          <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
+          <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showSetup}
@@ -312,7 +312,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
         </div>
       </div>
 
-      <div className="text-sm text-gray-500">
+      <div className="text-sm text-gray-500 dark:text-gray-400">
         {activeBookings.length} event{activeBookings.length !== 1 ? 's' : ''} on{' '}
         {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
           weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
@@ -320,14 +320,14 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
       </div>
 
       {columns.length === 0 ? (
-        <div className="rounded-md border bg-white py-16 text-center text-sm text-gray-400">
+        <div className="rounded-md border dark:border-gray-700 bg-white dark:bg-gray-800 py-16 text-center text-sm text-gray-400">
           No events scheduled for this date
         </div>
       ) : (
-        <div className="rounded-md border bg-white overflow-auto" style={{ maxHeight: 'calc(100vh - 190px)' }}>
+        <div className="rounded-md border dark:border-gray-700 bg-white dark:bg-gray-800 overflow-auto" style={{ maxHeight: 'calc(100vh - 190px)' }}>
           <div style={{ minWidth: gridWidth, display: 'grid', gridTemplateColumns: `50px repeat(${columns.length}, 1fr)` }}>
             {/* Header row — sticky */}
-            <div className="bg-gray-50 border-b-2 border-gray-200 p-1.5 text-xs font-bold text-gray-500 sticky top-0 z-20">
+            <div className="bg-gray-50 dark:bg-gray-700/50 border-b-2 border-gray-200 dark:border-gray-600 p-1.5 text-xs font-bold text-gray-500 dark:text-gray-400 sticky top-0 z-20">
               Time
             </div>
             {columns.map(col => {
@@ -335,7 +335,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
               return (
                 <div
                   key={col.id}
-                  className="bg-gray-50 border-b-2 border-gray-200 border-l border-gray-100 p-1.5 text-center sticky top-0 z-20"
+                  className="bg-gray-50 dark:bg-gray-700/50 border-b-2 border-gray-200 dark:border-gray-600 border-l border-gray-100 dark:border-gray-700 p-1.5 text-center sticky top-0 z-20"
                 >
                   <div className="flex items-center justify-center gap-1">
                     <span

@@ -38,11 +38,11 @@ export default async function DashboardLayout({
     <QueryProvider>
       <RealtimeSync />
       <ThemeProvider initialTheme={(p.theme === 'dark' ? 'dark' : 'light')}>
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex h-screen overflow-hidden dark:bg-gray-900">
           <Sidebar role={p.role as UserRole} />
           <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
             <TopBar userName={p.full_name} />
-            <main className="flex-1 overflow-auto p-6">{children}</main>
+            <main className="flex-1 overflow-auto p-6 dark:bg-gray-900 dark:text-gray-100">{children}</main>
           </div>
         </div>
       </ThemeProvider>

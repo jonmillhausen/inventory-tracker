@@ -25,6 +25,10 @@ interface V1Option {
 }
 
 interface V1ServiceField {
+  field_id?: string
+  field_name?: string
+  field_type?: string
+  value?: string | number   // numeric input fields store qty here
   selected_options?: V1Option[]
 }
 
@@ -593,22 +597,30 @@ function parseV1Job(job: V1Job): ParsedJob {
     // 10. Generic path
     // Build selections from service_fields (v1) or service_selections (v3 fallback).
 
-    // [TEMP DEBUG] Log qty data for Bubble Ball v1 service to confirm fix
-    if (svc.service_id === '1747439051481x330563883501879300') {
-      const bbOptions = (svc.service_fields ?? []).flatMap(f => f.selected_options ?? [])
-      console.log('[BB_QTY_DEBUG] service_id:', svc.service_id, 'service_name:', svcName)
-      console.log('[BB_QTY_DEBUG] options:', JSON.stringify(bbOptions.map(o => ({ id: o.id, text: o.text ?? o.name, qty: o.quantity }))))
-    }
+    const mapOption = (opt: V1Option) => ({
+      id:       opt.id ?? '',
+      text:     opt.text ?? opt.name ?? '',
+      // Coerce to number — the v1 API may return quantity as a string
+      quantity: opt.quantity !== undefined ? Number(opt.quantity) : undefined,
+      price:    opt.price !== undefined ? Number(opt.price) : undefined,
+    })
 
-    const sfSelections = (svc.service_fields ?? svc.service_selections ?? []).map(field => ({
-      selected_options: (field.selected_options ?? []).map(opt => ({
-        id:       opt.id ?? '',
-        text:     opt.text ?? opt.name ?? '',
-        // Coerce to number — the v1 API may return quantity as a string
-        quantity: opt.quantity !== undefined ? Number(opt.quantity) : undefined,
-        price:    opt.price !== undefined ? Number(opt.price) : undefined,
-      })),
-    }))
+    const sfSelections: Array<{ selected_options: ReturnType<typeof mapOption>[] }> =
+      svc.service_fields
+        ? svc.service_fields.map(field => {
+            const opts = (field.selected_options ?? []).map(mapOption)
+            // v1 numeric input fields: qty may be in field.value rather than selected_options
+            if (opts.length === 0 && field.value !== undefined && field.value !== null && field.value !== '') {
+              const qty = Number(field.value)
+              if (!isNaN(qty) && qty > 0) {
+                opts.push({ id: '', text: field.field_name ?? '', quantity: qty, price: undefined })
+              }
+            }
+            return { selected_options: opts }
+          })
+        : (svc.service_selections ?? []).map(field => ({
+            selected_options: (field.selected_options ?? []).map(mapOption),
+          }))
 
     const hasRealOptions = sfSelections.some(sel => (sel.selected_options?.length ?? 0) > 0)
 
@@ -634,6 +646,15 @@ function parseV1Job(job: V1Job): ParsedJob {
               }),
           }]
         : []
+
+    // [TEMP DEBUG] Full picture for Bubble Ball qty diagnosis
+    if (svc.service_id === '1747439051481x330563883501879300') {
+      const allOpts = [...sfSelections, ...psSelections].flatMap(s => s.selected_options ?? [])
+      console.log('[BB_QTY_DEBUG] service_name:', svcName)
+      console.log('[BB_QTY_DEBUG] service_fields (raw):', JSON.stringify(svc.service_fields ?? []))
+      console.log('[BB_QTY_DEBUG] pricing_summary (raw):', JSON.stringify(svc.pricing_summary ?? []))
+      console.log('[BB_QTY_DEBUG] resolved options pushed:', JSON.stringify(allOpts.map(o => ({ id: o.id, text: o.text, qty: o.quantity }))))
+    }
 
     services.push({
       service_id:         svc.service_id ?? '',

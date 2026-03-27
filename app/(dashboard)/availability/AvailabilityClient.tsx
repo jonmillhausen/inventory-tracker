@@ -87,21 +87,21 @@ function ChainPopup({
 }) {
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-20 w-64 bg-white border rounded-lg shadow-lg p-3 text-left"
+      className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-20 w-64 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg p-3 text-left"
       onClick={e => e.stopPropagation()}
     >
       <div className="flex justify-between items-center mb-2">
-        <span className="font-semibold text-xs">{chain}</span>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+        <span className="font-semibold text-xs dark:text-gray-100">{chain}</span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">✕</button>
       </div>
       {bookings.length === 0 ? (
         <p className="text-xs text-gray-400">No bookings</p>
       ) : (
         <div className="space-y-3 max-h-64 overflow-y-auto">
           {bookings.map(b => (
-            <div key={b.id} className="text-xs border-b pb-2 last:border-0 last:pb-0">
+            <div key={b.id} className="text-xs border-b dark:border-gray-700 pb-2 last:border-0 last:pb-0">
               <div className="flex items-center justify-between gap-1">
-                <span className="font-medium">{b.customer_name}</span>
+                <span className="font-medium dark:text-gray-100">{b.customer_name}</span>
                 {b.zenbooker_job_id && (
                   <a
                     href={`https://zenbooker.com/app?view=jobs&view-job=${b.zenbooker_job_id}`}
@@ -198,7 +198,7 @@ export function AvailabilityClient({
         <div className="flex items-center gap-1">
           <button
             onClick={() => setSelectedDate(prevDay(selectedDate))}
-            className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+            className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
             aria-label="Previous day"
           >
             <ChevronLeft size={14} />
@@ -207,18 +207,18 @@ export function AvailabilityClient({
             type="date"
             value={selectedDate}
             onChange={e => setSelectedDate(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
+            className="border dark:border-gray-600 rounded px-2 py-1 text-sm dark:bg-gray-800 dark:text-gray-100"
           />
           <button
             onClick={() => setSelectedDate(nextDay(selectedDate))}
-            className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+            className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
             aria-label="Next day"
           >
             <ChevronRight size={14} />
           </button>
           <button
             onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-            className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+            className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             Today
           </button>
@@ -234,8 +234,8 @@ export function AvailabilityClient({
           { label: 'Overbooked',    value: stats.overbooked, color: 'text-red-900' },
           { label: 'Low Stock',     value: stats.low,        color: 'text-amber-600' },
         ].map(s => (
-          <div key={s.label} className="bg-white border rounded-lg p-3">
-            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide">{s.label}</div>
+          <div key={s.label} className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg p-3">
+            <div className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">{s.label}</div>
             <div className={`text-2xl font-bold mt-1 font-mono ${s.color}`}>{s.value}</div>
           </div>
         ))}
@@ -256,7 +256,7 @@ export function AvailabilityClient({
             placeholder="Search equipment…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full border rounded px-3 py-1.5 text-sm pl-8"
+            className="w-full border dark:border-gray-600 rounded px-3 py-1.5 text-sm pl-8 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
           />
         </div>
         <button
@@ -264,7 +264,7 @@ export function AvailabilityClient({
           className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors border ${
             bookedOnly
               ? 'bg-blue-500 text-white border-blue-500'
-              : 'bg-white text-gray-500 border-gray-300 hover:border-gray-400'
+              : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
           }`}
         >
           {bookedOnly ? 'Show All Equipment' : 'Show Booked Only'}
@@ -272,10 +272,10 @@ export function AvailabilityClient({
       </div>
 
       {/* Table */}
-      <div className="bg-white border rounded-lg overflow-hidden">
+      <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 text-gray-600 text-left">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 text-left">
               <tr>
                 <th className="px-4 py-3 font-medium text-sm min-w-[160px]">Equipment</th>
                 <th className="px-3 py-3 font-medium text-center">Total</th>
@@ -329,14 +329,14 @@ export function AvailabilityClient({
                 })}
 
                 {/* Unassigned column */}
-                <th className="px-2 py-3 text-center text-[10px] font-medium text-gray-500">Unasgn</th>
+                <th className="px-2 py-3 text-center text-[10px] font-medium text-gray-500 dark:text-gray-400">Unasgn</th>
 
                 <th className="px-3 py-3 font-medium text-center">Booked</th>
                 <th className="px-3 py-3 font-medium text-center">Remaining</th>
                 <th className="px-3 py-3 font-medium text-center min-w-[100px]">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y dark:divide-gray-700">
               {filteredRows.length === 0 && (
                 <tr>
                   <td
@@ -348,15 +348,15 @@ export function AvailabilityClient({
                 </tr>
               )}
               {filteredRows.map((row, idx) => (
-                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                <tr key={row.id} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-700/30'}>
                   <td className="px-4 py-2.5 font-medium text-sm">{row.name}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-500">{row.total_qty}</td>
+                  <td className="px-3 py-2.5 text-center text-gray-500 dark:text-gray-400">{row.total_qty}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span
                       className={
                         row.out_of_service > 0 || row.issue_flag > 0
                           ? 'text-amber-600 font-medium'
-                          : 'text-gray-600'
+                          : 'text-gray-600 dark:text-gray-300'
                       }
                     >
                       {row.available_qty}
@@ -367,8 +367,8 @@ export function AvailabilityClient({
                       <span
                         className={
                           row.chain_qty[chain.id] > 0
-                            ? 'text-gray-900 font-medium'
-                            : 'text-gray-200'
+                            ? 'text-gray-900 dark:text-gray-100 font-medium'
+                            : 'text-gray-200 dark:text-gray-700'
                         }
                       >
                         {row.chain_qty[chain.id] || '—'}
@@ -380,7 +380,7 @@ export function AvailabilityClient({
                       className={
                         (row.chain_qty['Unassigned'] ?? 0) > 0
                           ? 'text-amber-600 font-medium'
-                          : 'text-gray-200'
+                          : 'text-gray-200 dark:text-gray-700'
                       }
                     >
                       {row.chain_qty['Unassigned'] || '—'}

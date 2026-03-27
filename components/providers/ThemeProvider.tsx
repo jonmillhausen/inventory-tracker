@@ -22,9 +22,13 @@ export function ThemeProvider({
 }) {
   const [theme, setTheme] = useState<Theme>(initialTheme)
 
+  // Keep <html> class in sync with theme state
   useEffect(() => {
-    // localStorage takes priority (most-recent client-side toggle);
-    // fall back to system preference if neither DB nor localStorage is set.
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
+  // On mount: resolve from localStorage or system preference
+  useEffect(() => {
     const stored = localStorage.getItem('theme') as Theme | null
     if (stored === 'light' || stored === 'dark') {
       setTheme(stored)
@@ -37,7 +41,6 @@ export function ThemeProvider({
     const next: Theme = theme === 'light' ? 'dark' : 'light'
     setTheme(next)
     try { localStorage.setItem('theme', next) } catch {}
-    // Persist to user profile in background — ignore errors silently
     fetch('/api/profile', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -47,9 +50,7 @@ export function ThemeProvider({
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <div className={theme === 'dark' ? 'dark contents' : 'contents'}>
-        {children}
-      </div>
+      {children}
     </ThemeContext.Provider>
   )
 }

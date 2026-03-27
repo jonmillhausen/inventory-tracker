@@ -56,7 +56,7 @@ function NeedsReviewPanel({ bookingId, onClose, onCreateMapping }: {
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={onClose}>
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 mx-4" onClick={e => e.stopPropagation()}>
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg p-6 mx-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold text-lg">Needs Review</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
@@ -94,7 +94,7 @@ function NeedsReviewPanel({ bookingId, onClose, onCreateMapping }: {
                 {showPayload ? 'Hide' : 'Show'} Raw Payload
               </button>
               {showPayload && (
-                <pre className="mt-2 bg-gray-50 rounded p-3 text-xs overflow-auto max-h-64">
+                <pre className="mt-2 bg-gray-50 dark:bg-gray-900 rounded p-3 text-xs overflow-auto max-h-64 dark:text-gray-300">
                   {JSON.stringify(log.raw_payload, null, 2)}
                 </pre>
               )}
@@ -254,14 +254,14 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
             Clear filters
           </Button>
         )}
-        <span className="text-sm text-gray-500 ml-auto">{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto">{filtered.length} booking{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
       {/* Table */}
-      <div className="rounded-md border overflow-x-auto">
+      <div className="rounded-md border dark:border-gray-700 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b bg-gray-50">
+            <tr className="border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
               <th className="text-left px-3 py-2 font-medium">Customer</th>
               <th className="text-left px-3 py-2 font-medium">Date</th>
               <th className="text-left px-3 py-2 font-medium">Time</th>
@@ -285,7 +285,7 @@ export function BookingsClient({ initialData, initialChains, role }: Props) {
               return (
                 <tr
                   key={booking.id}
-                  className={`border-b hover:bg-gray-50 ${isCanceled ? 'opacity-50' : ''}`}
+                  className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/30 ${isCanceled ? 'opacity-50' : ''}`}
                 >
                   <td className="px-3 py-2 font-medium">
                     <span className="inline-flex items-center gap-1.5">

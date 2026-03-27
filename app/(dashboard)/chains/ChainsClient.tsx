@@ -73,7 +73,7 @@ function ChainCard({
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       {/* Chain header */}
       <div
         className="px-3.5 py-2.5 flex items-center justify-between"
@@ -109,7 +109,7 @@ function ChainCard({
       </div>
 
       {bookings.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-gray-400">No events</div>
+        <div className="px-4 py-6 text-center text-sm text-gray-400 dark:text-gray-500">No events</div>
       ) : (
         <div className="p-3">
           {/* Packing list */}
@@ -118,7 +118,7 @@ function ChainCard({
               <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1.5 flex items-center gap-1">
                 Packing List
               </div>
-              <div className="bg-gray-50 rounded border border-gray-100 p-2 space-y-0">
+              <div className="bg-gray-50 dark:bg-gray-700/30 rounded border border-gray-100 dark:border-gray-700 p-2 space-y-0">
                 {parentItems.map(item => {
                   const subs = getSubItems(item.itemId)
                   const subKey = `${chain.id}::${item.itemId}`
@@ -128,7 +128,7 @@ function ChainCard({
                   return (
                     <div key={item.itemId}>
                       {/* Parent item row */}
-                      <div className="flex items-center justify-between py-1 border-b border-gray-100 last:border-0">
+                      <div className="flex items-center justify-between py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
                         <label className="flex items-center gap-1.5 cursor-pointer flex-1">
                           <input
                             type="checkbox"
@@ -197,7 +197,7 @@ function ChainCard({
               Events
             </div>
             {bookings.map(b => (
-              <div key={b.id} className="py-1.5 border-b border-gray-100 last:border-0 text-xs">
+              <div key={b.id} className="py-1.5 border-b border-gray-100 dark:border-gray-700 last:border-0 text-xs">
                 <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1.5">
                     {b.zenbooker_job_id ? (
@@ -223,12 +223,12 @@ function ChainCard({
                       {b.event_type ?? 'coordinated'}
                     </span>
                   </div>
-                  <span className="text-gray-500 whitespace-nowrap">
+                  <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
                     {to12(b.start_time)}–{to12(b.end_time)}
                   </span>
                 </div>
                 {b.address && (
-                  <div className="text-[10px] text-gray-400 mt-0.5 flex items-center gap-0.5">
+                  <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-0.5">
                     <MapPin size={8} />
                     {b.address}
                   </div>
@@ -379,7 +379,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
           <div className="flex items-center gap-1 mt-2">
             <button
               onClick={() => { setSelectedDate(prevDay(selectedDate)); setCheckedItems(new Set()) }}
-              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
               aria-label="Previous day"
             >
               <ChevronLeft size={14} />
@@ -396,7 +396,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
             />
             <button
               onClick={() => { setSelectedDate(nextDay(selectedDate)); setCheckedItems(new Set()) }}
-              className="border rounded px-1 py-1 text-gray-600 hover:bg-gray-50"
+              className="border rounded px-1 py-1 text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
               aria-label="Next day"
             >
               <ChevronRight size={14} />
@@ -406,7 +406,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
                 setSelectedDate(new Date().toISOString().split('T')[0])
                 setCheckedItems(new Set())
               }}
-              className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+              className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
             >
               Today
             </button>
@@ -436,7 +436,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
           className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors border ${
             selectedChain === 'all'
               ? 'bg-gray-900 text-white border-gray-900'
-              : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+              : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
           }`}
         >
           All
@@ -489,7 +489,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
       </div>
 
       {visibleChains.length === 0 && (
-        <div className="py-12 text-center text-gray-400 border rounded-md bg-white">
+        <div className="py-12 text-center text-gray-400 border dark:border-gray-700 rounded-md bg-white dark:bg-gray-800">
           No chains configured
         </div>
       )}

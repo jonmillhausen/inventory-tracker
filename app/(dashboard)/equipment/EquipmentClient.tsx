@@ -121,7 +121,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                   className={`px-3 py-1 text-sm rounded-md border font-medium transition-colors ${
                     equipmentFilter === f
                       ? 'bg-gray-900 text-white border-gray-900'
-                      : 'bg-white text-gray-900 border-gray-900 hover:bg-gray-50'
+                      : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-900 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
                   }`}
                 >
                   {labels[f]}
@@ -138,9 +138,9 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
         )}
       </div>
 
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-gray-600 text-left">
+          <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 text-left">
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
@@ -169,12 +169,12 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
               return (
                 <React.Fragment key={e.id}>
                   {/* Parent row */}
-                  <tr className="hover:bg-gray-50">
+                  <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                     <td className="px-4 py-3 font-bold">
                       {e.name}
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{e.total_qty}</td>
-                    <td className="px-4 py-3 text-center text-gray-300">—</td>
+                    <td className="px-4 py-3 text-center text-gray-300 dark:text-gray-600">—</td>
                     <td className="px-4 py-3 text-center">
                       {e.out_of_service > 0 ? (
                         <Badge variant="destructive">{e.out_of_service}</Badge>
@@ -215,7 +215,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
 
                   {/* Supplies toggle row */}
                   {subs.length > 0 && (
-                    <tr className="bg-gray-50/30">
+                    <tr className="bg-gray-50/30 dark:bg-gray-700/20">
                       <td className="px-4 py-1" colSpan={3}>
                         <button
                           onClick={() => toggleParent(e.id)}
@@ -241,7 +241,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
 
                   {/* Sub-item rows */}
                   {isExpanded && subs.map(({ sub, loadout_qty }) => (
-                    <tr key={sub.id} className="bg-gray-50/50 text-gray-600 text-xs">
+                    <tr key={sub.id} className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400 text-xs">
                       <td className="px-4 py-2 pl-10">{sub.name}</td>
                       <td className="px-4 py-2 text-center">{sub.total_qty}</td>
                       <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>

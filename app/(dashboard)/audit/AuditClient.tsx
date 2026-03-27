@@ -156,18 +156,18 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
         onClick={() => handleCellClick(cell.date)}
         className={`
           border rounded-lg p-2.5 cursor-pointer transition-colors min-h-[140px]
-          ${isToday ? 'border-blue-400 bg-blue-50/50' : 'border-gray-200 bg-white hover:bg-gray-50'}
+          ${isToday ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20 dark:border-blue-600' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50'}
         `}
       >
         {/* Date label */}
-        <div className="text-base font-bold text-gray-800 mb-1">{formatDayMonth(cell.date)}</div>
+        <div className="text-base font-bold text-gray-800 dark:text-gray-100 mb-1">{formatDayMonth(cell.date)}</div>
 
         {cell.eventCount === 0 ? (
-          <div className="text-xs text-gray-300 mt-2">No events</div>
+          <div className="text-xs text-gray-300 dark:text-gray-600 mt-2">No events</div>
         ) : (
           <>
             {/* Total event count */}
-            <div className="text-sm font-bold text-gray-700 mb-2">
+            <div className="text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">
               {cell.eventCount} event{cell.eventCount !== 1 ? 's' : ''}
             </div>
 
@@ -184,7 +184,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
                     >
                       {c.name === 'Will Call' ? 'WC' : c.name.replace(/\D/g, '').slice(0, 2) || c.name[0]}
                     </span>
-                    <span className="text-gray-500">— {count} event{count !== 1 ? 's' : ''}</span>
+                    <span className="text-gray-500 dark:text-gray-400">— {count} event{count !== 1 ? 's' : ''}</span>
                   </div>
                 )
               })}
@@ -196,7 +196,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
                   >
                     U
                   </span>
-                  <span className="text-gray-500">— {cell.unassignedCount} event{cell.unassignedCount !== 1 ? 's' : ''}</span>
+                  <span className="text-gray-500 dark:text-gray-400">— {cell.unassignedCount} event{cell.unassignedCount !== 1 ? 's' : ''}</span>
                 </div>
               )}
             </div>
@@ -233,7 +233,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
         <h1 className="text-xl font-semibold">2-Week Audit</h1>
         <button
           onClick={() => setAnchorDate(todayStr())}
-          className="border rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-50"
+          className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
         >
           Today
         </button>
@@ -241,17 +241,17 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
 
       {/* Legend */}
       <div className="flex items-center gap-5">
-        <span className="text-sm font-semibold text-gray-600">KEY:</span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><AlertTriangle size={26} className="text-red-500" /> <span className="font-bold">Overbooked</span></span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><Clock size={26} className="text-orange-500" /> <span className="font-bold">Overlap</span></span>
-        <span className="flex items-center gap-1.5 text-sm text-gray-500"><CircleHelp size={26} className="text-gray-400" /> <span className="font-bold">Unassigned</span></span>
+        <span className="text-sm font-semibold text-gray-600 dark:text-gray-300">KEY:</span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"><AlertTriangle size={26} className="text-red-500" /> <span className="font-bold">Overbooked</span></span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"><Clock size={26} className="text-orange-500" /> <span className="font-bold">Overlap</span></span>
+        <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400"><CircleHelp size={26} className="text-gray-400" /> <span className="font-bold">Unassigned</span></span>
       </div>
 
       {/* Week 1 */}
       <div>
         <div className="grid grid-cols-7 gap-1.5 mb-1">
           {dowLabels.map((dow, i) => (
-            <div key={i} className="text-[11px] font-semibold text-gray-400 text-center px-1">
+            <div key={i} className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 text-center px-1">
               {dow}
             </div>
           ))}
@@ -265,7 +265,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
       <div>
         <div className="grid grid-cols-7 gap-1.5 mb-1">
           {dates.slice(7, 14).map((d, i) => (
-            <div key={i} className="text-[11px] font-semibold text-gray-400 text-center px-1">
+            <div key={i} className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 text-center px-1">
               {formatDayOfWeek(d)}
             </div>
           ))}

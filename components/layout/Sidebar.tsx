@@ -48,7 +48,7 @@ export function Sidebar({ role }: SidebarProps) {
 
   return (
     <nav
-      className="relative flex flex-col shrink-0 h-full bg-gray-900 text-gray-100 gap-1 overflow-hidden transition-all duration-200 ease-in-out"
+      className="relative flex flex-col shrink-0 h-full bg-gray-900 text-gray-100 gap-1 overflow-hidden transition-all duration-200 ease-in-out dark:border-r dark:border-gray-700"
       style={{ width: collapsed ? 56 : 224, padding: collapsed ? '16px 0' : 16 }}
     >
       {/* Logo */}
