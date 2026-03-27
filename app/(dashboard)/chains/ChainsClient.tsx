@@ -223,12 +223,12 @@ function ChainCard({
                       {b.event_type ?? 'coordinated'}
                     </span>
                   </div>
-                  <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  <span className="text-gray-500 dark:text-white whitespace-nowrap">
                     {to12(b.start_time)}–{to12(b.end_time)}
                   </span>
                 </div>
                 {b.address && (
-                  <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 flex items-center gap-0.5">
+                  <div className="text-[10px] text-gray-400 dark:text-white mt-0.5 flex items-center gap-0.5">
                     <MapPin size={8} />
                     {b.address}
                   </div>

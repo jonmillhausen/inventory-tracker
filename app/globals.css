@@ -127,3 +127,8 @@
     @apply font-sans;
   }
 }
+
+/* Dark mode: make browser-native calendar icon blue instead of black */
+.dark input[type='date']::-webkit-calendar-picker-indicator {
+  filter: invert(0.4) sepia(1) saturate(5) hue-rotate(190deg);
+}

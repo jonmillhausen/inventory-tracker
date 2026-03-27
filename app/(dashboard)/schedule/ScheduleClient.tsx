@@ -6,6 +6,7 @@ import { useBookings } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { useEquipment } from '@/lib/queries/equipment'
 import { isBookingActiveOnDate } from '@/lib/utils/availability'
+import { useTheme } from '@/components/providers/ThemeProvider'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Truck, MapPin, ExternalLink, X, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
@@ -53,6 +54,15 @@ function formatTime12(time: string | null | undefined): string {
 function formatHour(h: number): string {
   if (h === 12) return '12p'
   return h < 12 ? `${h}a` : `${h - 12}p`
+}
+
+function isLightColor(hex: string): boolean {
+  const c = hex.replace('#', '')
+  if (c.length < 6) return true
+  const r = parseInt(c.substring(0, 2), 16)
+  const g = parseInt(c.substring(2, 4), 16)
+  const b = parseInt(c.substring(4, 6), 16)
+  return (r * 299 + g * 587 + b * 114) / 1000 > 128
 }
 
 function getSetup(
@@ -117,6 +127,7 @@ function nextDay(date: string): string {
 }
 
 export function ScheduleClient({ initialData, initialChains, initialEquipment }: Props) {
+  const { theme } = useTheme()
   const [selectedDate, setSelectedDate] = usePersistedDate('date:schedule')
   const [showTravel, setShowTravel] = useState(true)
   const [showSetup, setShowSetup] = useState(true)
@@ -360,9 +371,18 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                 <div
                   key={h}
                   className="absolute left-0 right-0 text-right pr-1"
-                  style={{ top: yPos(h * 60) - 6, fontSize: 9, color: '#94a3b8', fontFamily: 'monospace' }}
+                  style={{ top: yPos(h * 60) - 6, fontFamily: 'monospace' }}
                 >
-                  {formatHour(h)}
+                  <span
+                    style={{
+                      fontSize: 11,
+                      ...(theme === 'dark'
+                        ? { backgroundColor: 'black', color: 'white', borderRadius: 2, padding: '0 2px' }
+                        : { color: '#94a3b8' }),
+                    }}
+                  >
+                    {formatHour(h)}
+                  </span>
                 </div>
               ))}
               {HOURS.map(h => (
@@ -471,9 +491,10 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                             style={{
                               top: yPos(s - su.before),
                               height: su.before * PX_PER_MIN,
+                              backgroundColor: theme === 'dark' ? col.color + '59' : undefined,
                               border: `1px dashed ${col.color}`,
                               fontSize: 8,
-                              color: '#1e293b',
+                              color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : '#1e293b',
                             }}
                           >
                             {su.before}m Setup
@@ -487,13 +508,13 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                           style={{
                             top: yPos(s),
                             height: eventHeight,
-                            backgroundColor: col.color + '33',
+                            backgroundColor: theme === 'dark' ? col.color : col.color + '33',
                             border: `2px solid ${col.color}`,
                             padding: '2px 4px',
                             fontSize: 9,
                           }}
                         >
-                          <div className="font-bold truncate" style={{ color: '#1e293b' }}>
+                          <div className="font-bold truncate" style={{ color: theme === 'dark' ? (isLightColor(col.color) ? '#1e293b' : '#fff') : '#1e293b' }}>
                             {booking.customer_name || 'Event'}
                           </div>
                           <div style={{ opacity: 0.7, fontSize: 8 }}>
@@ -571,9 +592,10 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                             style={{
                               top: yPos(e),
                               height: su.after * PX_PER_MIN,
+                              backgroundColor: theme === 'dark' ? col.color + '59' : undefined,
                               border: `1px dashed ${col.color}`,
                               fontSize: 8,
-                              color: '#1e293b',
+                              color: theme === 'dark' ? 'rgba(255,255,255,0.5)' : '#1e293b',
                             }}
                           >
                             {su.after}m Cleanup
