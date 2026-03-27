@@ -750,14 +750,37 @@ export async function POST(request: Request) {
 
   let imported = 0
   let skipped_canceled = 0
+  let deleted_canceled = 0
   let skipped_admin = 0
   let errors = 0
   const error_details: Array<{ job_id: string; job_number: string; error: string }> = []
 
   for (const job of zbResponse.results ?? []) {
-    // Skip canceled — check both boolean field and status string
+    // Canceled jobs — check both boolean field and status string.
+    // If a booking exists in the DB for this job ID, delete it (and its booking_items).
+    // This handles jobs that were imported when active but later cancelled in Zenbooker.
     if (job.canceled === true || job.status === 'canceled') {
-      skipped_canceled++
+      const { data: existingBooking } = await supabase
+        .from('bookings')
+        .select('id')
+        .eq('zenbooker_job_id', job.id)
+        .maybeSingle()
+
+      if (existingBooking) {
+        await supabase.from('booking_items').delete().eq('booking_id', existingBooking.id)
+        await supabase.from('bookings').delete().eq('id', existingBooking.id)
+        await supabase.from('webhook_logs').insert({
+          received_at:      new Date().toISOString(),
+          zenbooker_job_id: job.id,
+          action:           'job.import',
+          raw_payload:      job as unknown as Record<string, unknown>,
+          result:           'skipped',
+          result_detail:    'canceled in Zenbooker: booking deleted',
+        })
+        deleted_canceled++
+      } else {
+        skipped_canceled++
+      }
       continue
     }
 
@@ -964,6 +987,7 @@ export async function POST(request: Request) {
   return NextResponse.json({
     imported,
     skipped_canceled,
+    deleted_canceled,
     skipped_admin,
     errors,
     error_details,
