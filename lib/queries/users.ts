@@ -57,6 +57,19 @@ export function useResendInvite() {
   })
 }
 
+export function useSendPasswordReset() {
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/admin/users/${id}/send-password-reset`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.text()
+        const err = (() => { try { return JSON.parse(body) } catch { return {} } })()
+        throw new Error((err as { error?: string }).error ?? 'Failed to send password reset')
+      }
+    },
+  })
+}
+
 export function useDeleteUser() {
   const qc = useQueryClient()
   return useMutation({

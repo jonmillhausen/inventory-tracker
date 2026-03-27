@@ -37,10 +37,13 @@ export async function POST(request: Request) {
 
   const adminSupabase = createAdminClient()
 
-  // Invite creates the auth user and sends an email with a set-password link
+  // Invite creates the auth user and emails a setup link pointing to our confirm page
   const { data: { user }, error: inviteError } = await adminSupabase.auth.admin.inviteUserByEmail(
     email.trim().toLowerCase(),
-    { data: { full_name: full_name.trim() } }
+    {
+      redirectTo: 'https://inventory-tracker-drab-xi.vercel.app/auth/confirm',
+      data: { full_name: full_name.trim() },
+    }
   )
 
   if (inviteError) return NextResponse.json({ error: inviteError.message }, { status: 400 })

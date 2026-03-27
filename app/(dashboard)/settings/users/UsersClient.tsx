@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useUsers, useUpdateUserRole, useResendInvite, useDeleteUser } from '@/lib/queries/users'
+import { useUsers, useUpdateUserRole, useResendInvite, useSendPasswordReset, useDeleteUser } from '@/lib/queries/users'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ import {
   AlertDialogAction,
 } from '@/components/ui/alert-dialog'
 import { InviteUserModal } from '@/components/modals/InviteUserModal'
-import { MoreHorizontal, Mail, Trash2 } from 'lucide-react'
+import { MoreHorizontal, Mail, KeyRound, Trash2 } from 'lucide-react'
 import type { Database, UserRole } from '@/lib/types/database.types'
 
 type UserRow = Database['public']['Tables']['users']['Row']
@@ -51,6 +51,7 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
   const { data: users = [] } = useUsers(initialUsers)
   const updateRole = useUpdateUserRole()
   const resendInvite = useResendInvite()
+  const sendPasswordReset = useSendPasswordReset()
   const deleteUser = useDeleteUser()
 
   const [showInvite, setShowInvite] = useState(false)
@@ -66,7 +67,14 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
 
   function handleResendInvite(user: UserRow) {
     resendInvite.mutate(user.id, {
-      onSuccess: () => setToast({ type: 'success', message: `Password setup email sent to ${user.full_name}` }),
+      onSuccess: () => setToast({ type: 'success', message: `Invite resent to ${user.full_name}` }),
+      onError: (err) => setToast({ type: 'error', message: err.message }),
+    })
+  }
+
+  function handleSendPasswordReset(user: UserRow) {
+    sendPasswordReset.mutate(user.id, {
+      onSuccess: () => setToast({ type: 'success', message: `Password reset email sent to ${user.full_name}` }),
       onError: (err) => setToast({ type: 'error', message: err.message }),
     })
   }
@@ -156,6 +164,13 @@ export function UsersClient({ initialUsers, currentUserId }: Props) {
                           >
                             <Mail size={14} />
                             Resend Invite
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSendPasswordReset(u)}
+                            disabled={sendPasswordReset.isPending}
+                          >
+                            <KeyRound size={14} />
+                            Send Password Reset
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

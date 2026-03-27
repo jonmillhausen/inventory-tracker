@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type { Database } from '@/lib/types/database.types'
 
 // Public paths that don't require authentication
-const PUBLIC_PATHS = ['/login', '/api/webhooks', '/api/packing-list']
+const PUBLIC_PATHS = ['/login', '/auth/confirm', '/api/webhooks', '/api/packing-list']
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(p => pathname.startsWith(p))

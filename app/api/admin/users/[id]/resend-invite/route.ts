@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSessionAndRole } from '@/lib/api/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 
+const CONFIRM_URL = 'https://inventory-tracker-drab-xi.vercel.app/auth/confirm'
+
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   console.log('[resend-invite] handler invoked')
   const auth = await getSessionAndRole(['admin'])
@@ -23,14 +25,28 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     return NextResponse.json({ error: 'User has no email address' }, { status: 400 })
   }
 
-  console.log('[resend-invite] calling generateLink recovery for', user.email)
-  const { error: linkErr } = await adminSupabase.auth.admin.generateLink({
-    type: 'recovery',
-    email: user.email,
+  console.log('[resend-invite] calling inviteUserByEmail for', user.email)
+  const { error: inviteErr } = await adminSupabase.auth.admin.inviteUserByEmail(user.email, {
+    redirectTo: CONFIRM_URL,
   })
-  if (linkErr) {
-    console.error('[resend-invite] generateLink error:', linkErr.message)
-    return NextResponse.json({ error: linkErr.message }, { status: 400 })
+
+  if (inviteErr) {
+    console.error('[resend-invite] inviteUserByEmail error:', inviteErr.message)
+
+    // User already confirmed their account — they have a password, can log in normally.
+    // Return 409 so the frontend can show a specific actionable message.
+    if (
+      inviteErr.message.toLowerCase().includes('already registered') ||
+      inviteErr.message.toLowerCase().includes('already been registered') ||
+      (inviteErr as { code?: string }).code === 'user_already_exists'
+    ) {
+      return NextResponse.json(
+        { error: 'This user already has an active account. Use Send Password Reset instead.' },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json({ error: inviteErr.message }, { status: 400 })
   }
 
   console.log('[resend-invite] success for', user.email)
