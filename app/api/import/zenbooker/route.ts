@@ -803,8 +803,8 @@ export async function POST(request: Request) {
         // ── Link to matching drop-off booking ─────────────────────────────
         // Find the most recent drop-off or coordinated booking at the same
         // address on or before the pickup date, then set linked_booking_id on
-        // both rows bidirectionally.  If the drop-off is already linked to a
-        // different pickup, flag this booking as needs_review instead.
+        // both rows bidirectionally.  If the drop-off is already linked (e.g.
+        // from a previous import run), the booking is still confirmed — not an error.
         let linkDetail = `${eventType}: imported with no equipment`
         if (eventDate) {
           const { data: matchingDropoff } = await supabase
@@ -820,11 +820,7 @@ export async function POST(request: Request) {
           if (matchingDropoff) {
             if (matchingDropoff.linked_booking_id) {
               // Already linked to a different pickup — flag for review
-              await supabase
-                .from('bookings')
-                .update({ status: 'needs_review' })
-                .eq('id', booking.id)
-              linkDetail += '; flagged needs_review: drop-off already linked'
+              linkDetail += '; drop-off already linked — confirmed'
             } else {
               // Bidirectional link
               await supabase
