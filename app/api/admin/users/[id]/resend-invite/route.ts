@@ -33,13 +33,33 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
   if (inviteErr) {
     console.error('[resend-invite] inviteUserByEmail error:', inviteErr.message)
 
-    // User already confirmed their account — they have a password, can log in normally.
-    // Return 409 so the frontend can show a specific actionable message.
-    if (
+    const isAlreadyRegistered =
       inviteErr.message.toLowerCase().includes('already registered') ||
       inviteErr.message.toLowerCase().includes('already been registered') ||
       (inviteErr as { code?: string }).code === 'user_already_exists'
-    ) {
+
+    if (isAlreadyRegistered) {
+      // Re-fetch to check confirmation status — inviteUserByEmail throws "already registered"
+      // for ANY existing auth record, confirmed or not.
+      const { data: { user: freshUser } } = await adminSupabase.auth.admin.getUserById(id)
+
+      if (freshUser && !freshUser.confirmed_at) {
+        // Unconfirmed — send a fresh invite link via generateLink
+        console.log('[resend-invite] unconfirmed user, generating fresh invite link for', user.email)
+        const { error: genErr } = await adminSupabase.auth.admin.generateLink({
+          type: 'invite',
+          email: user.email,
+          options: { redirectTo: CONFIRM_URL },
+        })
+        if (genErr) {
+          console.error('[resend-invite] generateLink error:', genErr.message)
+          return NextResponse.json({ error: genErr.message }, { status: 400 })
+        }
+        console.log('[resend-invite] fresh invite sent for', user.email)
+        return NextResponse.json({ ok: true })
+      }
+
+      // Confirmed — they have an active account, password reset is the right action
       return NextResponse.json(
         { error: 'This user already has an active account. Use Send Password Reset instead.' },
         { status: 409 }
