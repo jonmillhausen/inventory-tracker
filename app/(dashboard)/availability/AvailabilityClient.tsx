@@ -217,7 +217,7 @@ export function AvailabilityClient({
             <ChevronRight size={14} />
           </button>
           <button
-            onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+            onClick={() => setSelectedDate(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }))}
             className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             Today

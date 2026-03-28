@@ -23,7 +23,7 @@ interface Props {
 const FALLBACK_TRAVEL_MIN = 30
 
 function todayStr(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
 function addDays(base: string, n: number): string {
