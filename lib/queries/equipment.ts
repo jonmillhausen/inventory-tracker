@@ -7,6 +7,7 @@ import type { Database } from '@/lib/types/database.types'
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
 type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
+type OOSRow = Database['public']['Tables']['equipment_oos']['Row']
 
 export const EQUIPMENT_KEY = ['equipment'] as const
 
@@ -45,6 +46,8 @@ export function useEquipmentSubItems(initialData?: SubItemRow[]) {
 }
 
 export const SUB_ITEM_LINKS_KEY = ['equipment_sub_item_links'] as const
+export const EQUIPMENT_OOS_KEY = (equipmentId: string) => ['equipment_oos', equipmentId] as const
+export const EQUIPMENT_OOS_SUMS_KEY = ['equipment_oos_sums'] as const
 
 export function useSubItemLinks(initialData?: SubItemLinkRow[]) {
   return useQuery({
@@ -258,5 +261,89 @@ export function useMarkOOSReturned() {
       return res.json()
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: EQUIPMENT_KEY }),
+  })
+}
+
+// Fetch active OOS records for one equipment item (used by OOSDetailModal)
+export function useEquipmentOOS(equipmentId: string) {
+  return useQuery({
+    queryKey: EQUIPMENT_OOS_KEY(equipmentId),
+    queryFn: async (): Promise<OOSRow[]> => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_oos')
+        .select('*')
+        .eq('equipment_id', equipmentId)
+        .is('returned_at', null)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data as OOSRow[]
+    },
+  })
+}
+
+// Fetch active OOS quantity sum per equipment_id (used in equipment table + availability)
+export function useEquipmentOOSSums() {
+  return useQuery({
+    queryKey: EQUIPMENT_OOS_SUMS_KEY,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_oos')
+        .select('equipment_id, quantity')
+        .is('returned_at', null)
+      if (error) throw error
+      const sums: Record<string, number> = {}
+      for (const row of data ?? []) {
+        sums[row.equipment_id] = (sums[row.equipment_id] ?? 0) + row.quantity
+      }
+      return sums
+    },
+  })
+}
+
+export function useMarkOOS() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      equipmentId,
+      quantity,
+      issue_description,
+      expected_return_date,
+    }: {
+      equipmentId: string
+      quantity: number
+      issue_description?: string | null
+      expected_return_date?: string | null
+    }) => {
+      const res = await fetch(`/api/equipment/${equipmentId}/oos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity, issue_description, expected_return_date }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: (_, { equipmentId }) => {
+      qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_KEY(equipmentId) })
+      qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_SUMS_KEY })
+    },
+  })
+}
+
+export function useReturnFromOOS() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ equipmentId, oosId }: { equipmentId: string; oosId: string }) => {
+      const res = await fetch(`/api/equipment/${equipmentId}/oos/${oosId}/return`, {
+        method: 'PATCH',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: (_, { equipmentId }) => {
+      qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_KEY(equipmentId) })
+      qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_SUMS_KEY })
+    },
   })
 }
