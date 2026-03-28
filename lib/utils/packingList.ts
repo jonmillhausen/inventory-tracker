@@ -23,7 +23,7 @@ const COORD_TYPES: EventType[] = ['coordinated', 'pickup']
 // Tier 1 (per 10): floor(qty/10), min 1
 // Tier 2 (per 20): floor(qty/20), min 1
 // Tier 3 (default): qty as-is
-const TIER1_SLUGS = new Set(['bubbleball', 'elite_laser_tag', 'arrow_tag'])
+const TIER1_SLUGS = new Set(['bubble_ball', 'elite_laser_tag', 'arrow_tag'])
 const TIER2_SLUGS = new Set(['gel_tag', 'laser_tag_lite'])
 
 function slugify(name: string): string {
