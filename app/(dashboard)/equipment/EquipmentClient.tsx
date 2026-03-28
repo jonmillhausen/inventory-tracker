@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums } from '@/lib/queries/equipment'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
 import { OOSModal } from '@/components/modals/OOSModal'
+import { OOSDetailModal } from '@/components/modals/OOSDetailModal'
 import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal'
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
 import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
@@ -31,13 +32,14 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
+  const { data: oosSums = {} } = useEquipmentOOSSums()
 
   // Modal state
   const [addingType, setAddingType] = useState<'primary' | 'sub_item' | null>(null)
   const [editEquipment, setEditEquipment] = useState<EquipmentRow | null>(null)
   const [editSubItem, setEditSubItem] = useState<SubItemRow | null>(null)
   const [issueFlagTarget, setIssueFlagTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
-  const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
+  const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type?: 'equipment' | 'sub_item' } | null>(null)
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
@@ -47,7 +49,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
 
   // Filtered equipment for table display
   const filteredEquipment = useMemo(() => {
-    if (equipmentFilter === 'damaged') return activeEquipment.filter(e => e.out_of_service >= 1)
+    if (equipmentFilter === 'damaged') return activeEquipment.filter(e => (oosSums[e.id] ?? 0) >= 1)
     if (equipmentFilter === 'flags') return activeEquipment.filter(e => e.issue_flag >= 1)
     return activeEquipment
   }, [activeEquipment, equipmentFilter])
@@ -113,7 +115,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
           {/* Filter buttons */}
           <div className="flex gap-1.5">
             {(['all', 'damaged', 'flags'] as const).map(f => {
-              const labels = { all: 'All Equipment', damaged: 'Damaged Only', flags: 'Flags Only' }
+              const labels = { all: 'All Equipment', damaged: 'Out of Service Only', flags: 'Flags Only' }
               return (
                 <button
                   key={f}
@@ -145,12 +147,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
               <th className="px-4 py-3 font-medium text-center">Loadout</th>
-              <th className="px-4 py-3 font-medium text-center">
-                <span className="inline-flex items-center gap-1 justify-center">
-                  <X size={13} className="text-red-500" />
-                  Damaged
-                </span>
-              </th>
+              <th className="px-4 py-3 font-medium text-center">Out of Service</th>
               <th className="px-4 py-3 font-medium text-center">
                 <span className="inline-flex items-center gap-1 justify-center">
                   <Flag size={13} className="text-orange-500" />
@@ -176,9 +173,25 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     <td className="px-4 py-3 text-center font-medium">{e.total_qty}</td>
                     <td className="px-4 py-3 text-center text-gray-300 dark:text-gray-600">—</td>
                     <td className="px-4 py-3 text-center">
-                      {e.out_of_service > 0 ? (
-                        <Badge variant="destructive">{e.out_of_service}</Badge>
-                      ) : '—'}
+                      <div className="inline-flex items-center gap-1.5">
+                        {(oosSums[e.id] ?? 0) > 0 ? (
+                          <button
+                            onClick={() => setOosTarget({ id: e.id, name: e.name })}
+                            className="text-sm font-semibold text-red-600 hover:text-red-700 hover:underline"
+                          >
+                            {oosSums[e.id]}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-gray-300 dark:text-gray-600">0</span>
+                        )}
+                        <button
+                          onClick={() => setOosTarget({ id: e.id, name: e.name })}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                          aria-label="Add out of service record"
+                        >
+                          <span className="text-base leading-none">+</span>
+                        </button>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {e.issue_flag > 0 ? (
@@ -199,10 +212,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                         )}
                         {canAdmin(role) && (
                           <>
-                            <Button size="sm" variant="outline"
-                              onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}>
-                              Damaged
-                            </Button>
                             <Button size="sm" variant="outline"
                               onClick={() => setEditEquipment(e)}>
                               Edit
@@ -321,9 +330,18 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
       {issueFlagTarget && (
         <IssueFlagModal target={issueFlagTarget} onClose={() => setIssueFlagTarget(null)} />
       )}
-      {oosTarget && (
-        <OOSModal target={oosTarget} onClose={() => setOosTarget(null)} />
-      )}
+      {oosTarget && oosTarget.type === 'sub_item' ? (
+        <OOSModal
+          target={{ id: oosTarget.id, name: oosTarget.name, type: 'sub_item' }}
+          onClose={() => setOosTarget(null)}
+        />
+      ) : oosTarget ? (
+        <OOSDetailModal
+          equipmentId={oosTarget.id}
+          equipmentName={oosTarget.name}
+          onClose={() => setOosTarget(null)}
+        />
+      ) : null}
       {resolveFlagItemId && (
         <ResolveIssueFlagModal itemId={resolveFlagItemId} onClose={() => setResolveFlagItemId(null)} />
       )}
