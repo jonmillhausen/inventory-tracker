@@ -18,53 +18,53 @@ export default function AuthConfirmPage() {
   useEffect(() => {
     const supabase = createClient()
 
-    // Case 1: PKCE flow — token delivered as query params
-    const params = new URLSearchParams(window.location.search)
-    const token_hash = params.get('token_hash')
-    const type = params.get('type') as 'invite' | 'recovery' | null
+    async function handleToken() {
+      // Case 1: Hash fragment (implicit flow — invite links)
+      const hash = window.location.hash.substring(1)
+      const hashParams = new URLSearchParams(hash)
+      const access_token = hashParams.get('access_token')
+      const refresh_token = hashParams.get('refresh_token')
+      const hashError = hashParams.get('error')
 
-    if (token_hash && type) {
-      supabase.auth.verifyOtp({ token_hash, type })
-        .then(({ error }) => {
-          if (error) {
-            setError(error.message)
-            setStage('error')
-          } else {
-            setStage('set-password')
-          }
-        })
-      return
-    }
-
-    // Case 2: Implicit flow — token delivered as hash fragment (#access_token=...)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && session) {
-        setStage('set-password')
+      if (hashError) {
+        setError(hashParams.get('error_description') ?? 'Link is invalid or expired.')
+        setStage('error')
+        return
       }
-    })
 
-    const timeout = setTimeout(() => {
-      setStage(prev => {
-        if (prev === 'verifying') {
-          setError('This link has expired or is invalid. Contact your admin to send a new one.')
-          return 'error'
+      if (access_token && refresh_token) {
+        const { error } = await supabase.auth.setSession({ access_token, refresh_token })
+        if (error) {
+          setError(error.message)
+          setStage('error')
+        } else {
+          setStage('set-password')
         }
-        return prev
-      })
-    }, 10000)
-
-    // In case the auth event already fired before the listener was registered
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setStage('set-password')
-        clearTimeout(timeout)
+        return
       }
-    })
 
-    return () => {
-      subscription.unsubscribe()
-      clearTimeout(timeout)
+      // Case 2: Query params (PKCE flow — password reset links)
+      const params = new URLSearchParams(window.location.search)
+      const token_hash = params.get('token_hash')
+      const type = params.get('type') as 'invite' | 'recovery' | null
+
+      if (token_hash && type) {
+        const { error } = await supabase.auth.verifyOtp({ token_hash, type })
+        if (error) {
+          setError(error.message)
+          setStage('error')
+        } else {
+          setStage('set-password')
+        }
+        return
+      }
+
+      // No token found
+      setError('Invalid or missing link parameters. Please request a new link from your admin.')
+      setStage('error')
     }
+
+    handleToken()
   }, [])
 
   async function handleSetPassword(e: React.FormEvent) {
