@@ -141,6 +141,28 @@ export interface Database {
         Update: Partial<{ return_date: string | null; returned_at: string | null }>
         Relationships: []
       }
+      equipment_oos: {
+        Row: {
+          id: string
+          equipment_id: string
+          quantity: number
+          issue_description: string | null
+          expected_return_date: string | null
+          returned_at: string | null
+          created_at: string
+        }
+        Insert: {
+          equipment_id: string
+          quantity?: number
+          issue_description?: string | null
+          expected_return_date?: string | null
+          returned_at?: string | null
+        }
+        Update: Partial<{
+          returned_at: string | null
+        }>
+        Relationships: []
+      }
       bookings: {
         Row: {
           id: string
