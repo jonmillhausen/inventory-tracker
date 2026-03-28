@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo } from 'react'
 import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums } from '@/lib/queries/equipment'
+import { useBookings } from '@/lib/queries/bookings'
+import { calculateAvailability } from '@/lib/utils/availability'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
@@ -33,6 +35,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
   const { data: oosSums = {} } = useEquipmentOOSSums()
+  const { data: bookingsData = { bookings: [], bookingItems: [] } } = useBookings()
 
   // Modal state
   const [addingType, setAddingType] = useState<'primary' | 'sub_item' | null>(null)
@@ -43,6 +46,13 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
+
+  const todayET = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), [])
+  const oosMap = useMemo(() => new Map(Object.entries(oosSums)), [oosSums])
+  const availByEquipmentId = useMemo(() => {
+    const rows = calculateAvailability(equipment, [], bookingsData.bookings, bookingsData.bookingItems, todayET, oosMap)
+    return new Map(rows.map(r => [r.id, r.available_qty]))
+  }, [equipment, bookingsData, todayET, oosMap])
 
   // All active primary equipment (for modals)
   const activeEquipment = useMemo(() => equipment.filter(e => e.is_active), [equipment])
@@ -146,6 +156,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
+              <th className="px-4 py-3 font-medium text-center">Avail.</th>
               <th className="px-4 py-3 font-medium text-center">Loadout</th>
               <th className="px-4 py-3 font-medium text-center">Out of Service</th>
               <th className="px-4 py-3 font-medium text-center">
@@ -171,6 +182,12 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                       {e.name}
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{e.total_qty}</td>
+                    <td className="px-4 py-3 text-center font-medium">
+                      {(() => {
+                        const avail = availByEquipmentId.get(e.id) ?? 0
+                        return <span className={avail > 0 ? 'text-green-600' : 'text-red-600'}>{avail}</span>
+                      })()}
+                    </td>
                     <td className="px-4 py-3 text-center text-gray-300 dark:text-gray-600">—</td>
                     <td className="px-4 py-3 text-center">
                       <div className="inline-flex items-center gap-1.5">
@@ -225,7 +242,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                   {/* Supplies toggle row */}
                   {subs.length > 0 && (
                     <tr className="bg-gray-50/30 dark:bg-gray-700/20">
-                      <td className="px-4 py-1" colSpan={3}>
+                      <td className="px-4 py-1" colSpan={4}>
                         <button
                           onClick={() => toggleParent(e.id)}
                           className="flex items-center gap-1 text-xs text-gray-500 font-semibold hover:text-gray-700"
@@ -253,6 +270,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     <tr key={sub.id} className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400 text-xs">
                       <td className="px-4 py-2 pl-10">{sub.name}</td>
                       <td className="px-4 py-2 text-center">{sub.total_qty}</td>
+                      <td className="px-4 py-2" />
                       <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>
                       <td className="px-4 py-2 text-center">
                         {sub.out_of_service > 0 ? (

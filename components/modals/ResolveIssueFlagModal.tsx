@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/client'
-import { useResolveIssueFlag } from '@/lib/queries/equipment'
+import { useResolveIssueFlag, useMarkOOS } from '@/lib/queries/equipment'
 import type { Database } from '@/lib/types/database.types'
 
 type IssueFlagRow = Database['public']['Tables']['issue_flag_items']['Row']
@@ -19,6 +19,7 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const mutation = useResolveIssueFlag()
+  const markOOS = useMarkOOS()
 
   useEffect(() => {
     const supabase = createClient()
@@ -34,12 +35,19 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
       })
   }, [itemId])
 
-  async function resolve(flagId: string, action: 'cleared' | 'moved_to_oos') {
+  async function resolve(flag: IssueFlagRow, action: 'cleared' | 'moved_to_oos') {
     try {
-      await mutation.mutateAsync({ id: flagId, resolved_action: action })
+      if (action === 'moved_to_oos' && flag.item_type === 'equipment') {
+        await markOOS.mutateAsync({
+          equipmentId: flag.item_id,
+          quantity: flag.qty ?? 1,
+          issue_description: flag.note ?? null,
+        })
+      }
+      await mutation.mutateAsync({ id: flag.id, resolved_action: action })
       // Derive new length inside the updater to avoid stale closure on `flags`
       setFlags(prev => {
-        const next = prev.filter(f => f.id !== flagId)
+        const next = prev.filter(f => f.id !== flag.id)
         if (next.length === 0) onClose()
         return next
       })
@@ -68,13 +76,13 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
               </p>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline"
-                  onClick={() => resolve(flag.id, 'cleared')}
-                  disabled={mutation.isPending}>
+                  onClick={() => resolve(flag, 'cleared')}
+                  disabled={mutation.isPending || markOOS.isPending}>
                   Clear
                 </Button>
                 <Button size="sm" variant="destructive"
-                  onClick={() => resolve(flag.id, 'moved_to_oos')}
-                  disabled={mutation.isPending}>
+                  onClick={() => resolve(flag, 'moved_to_oos')}
+                  disabled={mutation.isPending || markOOS.isPending}>
                   Move to OOS
                 </Button>
               </div>
