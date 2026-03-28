@@ -48,6 +48,8 @@ export function useEquipmentSubItems(initialData?: SubItemRow[]) {
 export const SUB_ITEM_LINKS_KEY = ['equipment_sub_item_links'] as const
 export const EQUIPMENT_OOS_KEY = (equipmentId: string) => ['equipment_oos', equipmentId] as const
 export const EQUIPMENT_OOS_SUMS_KEY = ['equipment_oos_sums'] as const
+export const SUB_ITEM_OOS_KEY = (subItemId: string) => ['sub_item_oos', subItemId] as const
+export const SUB_ITEM_OOS_SUMS_KEY = ['sub_item_oos_sums'] as const
 
 export function useSubItemLinks(initialData?: SubItemLinkRow[]) {
   return useQuery({
@@ -291,11 +293,14 @@ export function useEquipmentOOSSums() {
       const { data, error } = await supabase
         .from('equipment_oos')
         .select('equipment_id, quantity')
+        .not('equipment_id', 'is', null)
         .is('returned_at', null)
       if (error) throw error
       const sums: Record<string, number> = {}
       for (const row of data ?? []) {
-        sums[row.equipment_id] = (sums[row.equipment_id] ?? 0) + row.quantity
+        if (row.equipment_id) {
+          sums[row.equipment_id] = (sums[row.equipment_id] ?? 0) + row.quantity
+        }
       }
       return sums
     },
@@ -344,6 +349,91 @@ export function useReturnFromOOS() {
     onSuccess: (_, { equipmentId }) => {
       qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_KEY(equipmentId) })
       qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_SUMS_KEY })
+    },
+  })
+}
+
+export function useSubItemOOS(subItemId: string) {
+  return useQuery({
+    queryKey: SUB_ITEM_OOS_KEY(subItemId),
+    queryFn: async (): Promise<OOSRow[]> => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_oos')
+        .select('*')
+        .eq('sub_item_id', subItemId)
+        .is('returned_at', null)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data as OOSRow[]
+    },
+  })
+}
+
+export function useSubItemOOSSums() {
+  return useQuery({
+    queryKey: SUB_ITEM_OOS_SUMS_KEY,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('equipment_oos')
+        .select('sub_item_id, quantity')
+        .not('sub_item_id', 'is', null)
+        .is('returned_at', null)
+      if (error) throw error
+      const sums: Record<string, number> = {}
+      for (const row of data ?? []) {
+        if (row.sub_item_id) {
+          sums[row.sub_item_id] = (sums[row.sub_item_id] ?? 0) + row.quantity
+        }
+      }
+      return sums
+    },
+  })
+}
+
+export function useMarkSubItemOOS() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      subItemId,
+      quantity,
+      issue_description,
+      expected_return_date,
+    }: {
+      subItemId: string
+      quantity: number
+      issue_description?: string | null
+      expected_return_date?: string | null
+    }) => {
+      const res = await fetch(`/api/equipment/sub-items/${subItemId}/oos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantity, issue_description, expected_return_date }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: (_, { subItemId }) => {
+      qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_KEY(subItemId) })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_SUMS_KEY })
+    },
+  })
+}
+
+export function useReturnSubItemFromOOS() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ subItemId, oosId }: { subItemId: string; oosId: string }) => {
+      const res = await fetch(`/api/equipment/sub-items/${subItemId}/oos/${oosId}/return`, {
+        method: 'PATCH',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: (_, { subItemId }) => {
+      qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_KEY(subItemId) })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_SUMS_KEY })
     },
   })
 }

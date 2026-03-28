@@ -1,13 +1,12 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums, useSubItemOOSSums } from '@/lib/queries/equipment'
 import { useBookings } from '@/lib/queries/bookings'
 import { calculateAvailability } from '@/lib/utils/availability'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
-import { OOSModal } from '@/components/modals/OOSModal'
 import { OOSDetailModal } from '@/components/modals/OOSDetailModal'
 import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal'
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
@@ -35,6 +34,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
   const { data: oosSums = {} } = useEquipmentOOSSums()
+  const { data: subItemOosSums = {} } = useSubItemOOSSums()
   const { data: bookingsData = { bookings: [], bookingItems: [] } } = useBookings()
 
   // Modal state
@@ -42,7 +42,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [editEquipment, setEditEquipment] = useState<EquipmentRow | null>(null)
   const [editSubItem, setEditSubItem] = useState<SubItemRow | null>(null)
   const [issueFlagTarget, setIssueFlagTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
-  const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type?: 'equipment' | 'sub_item' } | null>(null)
+  const [oosTarget, setOosTarget] = useState<{ id: string; name: string; type: 'equipment' | 'sub_item' } | null>(null)
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
@@ -53,6 +53,16 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
     const rows = calculateAvailability(equipment, [], bookingsData.bookings, bookingsData.bookingItems, todayET, oosMap)
     return new Map(rows.map(r => [r.id, r.available_qty]))
   }, [equipment, bookingsData, todayET, oosMap])
+
+  // Sub-item available qty = total_qty - active_oos (no booking deduction)
+  const subItemAvailById = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const sub of subItems) {
+      if (!sub.is_active) continue
+      map.set(sub.id, Math.max(0, sub.total_qty - (subItemOosSums[sub.id] ?? 0)))
+    }
+    return map
+  }, [subItems, subItemOosSums])
 
   // All active primary equipment (for modals)
   const activeEquipment = useMemo(() => equipment.filter(e => e.is_active), [equipment])
@@ -90,11 +100,11 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
     for (const [parentId, subs] of linksByParent) {
       result.set(parentId, {
         hasFlags: subs.some(({ sub }) => sub.issue_flag > 0),
-        hasDamage: subs.some(({ sub }) => sub.out_of_service > 0),
+        hasDamage: subs.some(({ sub }) => (subItemOosSums[sub.id] ?? 0) > 0),
       })
     }
     return result
-  }, [linksByParent])
+  }, [linksByParent, subItemOosSums])
 
   // Existing links for a specific sub-item (for edit pre-fill)
   const linksBySubItem = useMemo(() => {
@@ -193,7 +203,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                       <div className="inline-flex items-center gap-1.5">
                         {(oosSums[e.id] ?? 0) > 0 ? (
                           <button
-                            onClick={() => setOosTarget({ id: e.id, name: e.name })}
+                            onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}
                             className="text-sm font-semibold text-red-600 hover:text-red-700 hover:underline"
                           >
                             {oosSums[e.id]}
@@ -202,7 +212,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           <span className="text-sm text-gray-300 dark:text-gray-600">0</span>
                         )}
                         <button
-                          onClick={() => setOosTarget({ id: e.id, name: e.name })}
+                          onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}
                           className="text-gray-400 hover:text-red-600 transition-colors"
                           aria-label="Add out of service record"
                         >
@@ -266,50 +276,66 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                   )}
 
                   {/* Sub-item rows */}
-                  {isExpanded && subs.map(({ sub, loadout_qty }) => (
-                    <tr key={sub.id} className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400 text-xs">
-                      <td className="px-4 py-2 pl-10">{sub.name}</td>
-                      <td className="px-4 py-2 text-center">{sub.total_qty}</td>
-                      <td className="px-4 py-2" />
-                      <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>
-                      <td className="px-4 py-2 text-center">
-                        {sub.out_of_service > 0 ? (
-                          <Badge variant="destructive" className="text-xs">{sub.out_of_service}</Badge>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        {sub.issue_flag > 0 ? (
-                          <button onClick={() => canResolveFlag(role) ? setResolveFlagItemId(sub.id) : undefined} className="inline-flex">
-                            <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs cursor-pointer">
-                              {sub.issue_flag}
-                            </Badge>
-                          </button>
-                        ) : '—'}
-                      </td>
-                      <td className="px-4 py-2">
-                        <div className="flex gap-1">
-                          {canCreateIssueFlag(role) && (
-                            <Button size="sm" variant="outline" className="h-6 text-xs"
-                              onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
-                              Flag
-                            </Button>
-                          )}
-                          {canAdmin(role) && (
-                            <>
+                  {isExpanded && subs.map(({ sub, loadout_qty }) => {
+                    const subOos = subItemOosSums[sub.id] ?? 0
+                    const subAvail = subItemAvailById.get(sub.id) ?? 0
+                    return (
+                      <tr key={sub.id} className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400 text-xs">
+                        <td className="px-4 py-2 pl-10">{sub.name}</td>
+                        <td className="px-4 py-2 text-center">{sub.total_qty}</td>
+                        <td className="px-4 py-2 text-center font-medium">
+                          <span className={subAvail > 0 ? 'text-green-600' : 'text-red-600'}>{subAvail}</span>
+                        </td>
+                        <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>
+                        <td className="px-4 py-2 text-center">
+                          <div className="inline-flex items-center gap-1">
+                            {subOos > 0 ? (
+                              <button
+                                onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}
+                                className="font-semibold text-red-600 hover:text-red-700 hover:underline"
+                              >
+                                {subOos}
+                              </button>
+                            ) : (
+                              <span className="text-gray-300 dark:text-gray-600">0</span>
+                            )}
+                            <button
+                              onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}
+                              className="text-gray-400 hover:text-red-600 transition-colors"
+                              aria-label="Add out of service record"
+                            >
+                              <span className="text-sm leading-none">+</span>
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          {sub.issue_flag > 0 ? (
+                            <button onClick={() => canResolveFlag(role) ? setResolveFlagItemId(sub.id) : undefined} className="inline-flex">
+                              <Badge variant="outline" className="text-yellow-700 border-yellow-400 text-xs cursor-pointer">
+                                {sub.issue_flag}
+                              </Badge>
+                            </button>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-2">
+                          <div className="flex gap-1">
+                            {canCreateIssueFlag(role) && (
                               <Button size="sm" variant="outline" className="h-6 text-xs"
-                                onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
-                                Damaged
+                                onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
+                                Flag
                               </Button>
+                            )}
+                            {canAdmin(role) && (
                               <Button size="sm" variant="outline" className="h-6 text-xs"
                                 onClick={() => setEditSubItem(sub)}>
                                 Edit
                               </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </React.Fragment>
               )
             })}
@@ -348,18 +374,14 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
       {issueFlagTarget && (
         <IssueFlagModal target={issueFlagTarget} onClose={() => setIssueFlagTarget(null)} />
       )}
-      {oosTarget && oosTarget.type === 'sub_item' ? (
-        <OOSModal
-          target={{ id: oosTarget.id, name: oosTarget.name, type: 'sub_item' }}
-          onClose={() => setOosTarget(null)}
-        />
-      ) : oosTarget ? (
+      {oosTarget && (
         <OOSDetailModal
-          equipmentId={oosTarget.id}
-          equipmentName={oosTarget.name}
+          itemId={oosTarget.id}
+          itemName={oosTarget.name}
+          itemType={oosTarget.type}
           onClose={() => setOosTarget(null)}
         />
-      ) : null}
+      )}
       {resolveFlagItemId && (
         <ResolveIssueFlagModal itemId={resolveFlagItemId} onClose={() => setResolveFlagItemId(null)} />
       )}

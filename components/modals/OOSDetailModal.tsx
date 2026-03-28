@@ -5,18 +5,31 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useEquipmentOOS, useMarkOOS, useReturnFromOOS } from '@/lib/queries/equipment'
+import {
+  useEquipmentOOS,
+  useMarkOOS,
+  useReturnFromOOS,
+  useSubItemOOS,
+  useMarkSubItemOOS,
+  useReturnSubItemFromOOS,
+} from '@/lib/queries/equipment'
 
 interface Props {
-  equipmentId: string
-  equipmentName: string
+  itemId: string
+  itemName: string
+  itemType: 'equipment' | 'sub_item'
   onClose: () => void
 }
 
-export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
-  const { data: records = [] } = useEquipmentOOS(equipmentId)
-  const markOOS = useMarkOOS()
-  const returnFromOOS = useReturnFromOOS()
+export function OOSDetailModal({ itemId, itemName, itemType, onClose }: Props) {
+  const { data: equipmentRecords = [] } = useEquipmentOOS(itemType === 'equipment' ? itemId : '')
+  const { data: subItemRecords = [] } = useSubItemOOS(itemType === 'sub_item' ? itemId : '')
+  const records = itemType === 'equipment' ? equipmentRecords : subItemRecords
+
+  const markEquipmentOOS = useMarkOOS()
+  const markSubItemOOS = useMarkSubItemOOS()
+  const returnEquipmentFromOOS = useReturnFromOOS()
+  const returnSubItemFromOOS = useReturnSubItemFromOOS()
 
   const [quantity, setQuantity] = useState(1)
   const [issueDescription, setIssueDescription] = useState('')
@@ -24,17 +37,23 @@ export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
   const [error, setError] = useState<string | null>(null)
 
   const activeCount = records.reduce((sum, r) => sum + r.quantity, 0)
+  const isMarkPending = markEquipmentOOS.isPending || markSubItemOOS.isPending
+  const isReturnPending = returnEquipmentFromOOS.isPending || returnSubItemFromOOS.isPending
 
   async function handleMarkOOS(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     try {
-      await markOOS.mutateAsync({
-        equipmentId,
+      const shared = {
         quantity,
         issue_description: issueDescription || null,
         expected_return_date: expectedReturnDate || null,
-      })
+      }
+      if (itemType === 'equipment') {
+        await markEquipmentOOS.mutateAsync({ equipmentId: itemId, ...shared })
+      } else {
+        await markSubItemOOS.mutateAsync({ subItemId: itemId, ...shared })
+      }
       setQuantity(1)
       setIssueDescription('')
       setExpectedReturnDate('')
@@ -46,7 +65,11 @@ export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
   async function handleReturn(oosId: string) {
     setError(null)
     try {
-      await returnFromOOS.mutateAsync({ equipmentId, oosId })
+      if (itemType === 'equipment') {
+        await returnEquipmentFromOOS.mutateAsync({ equipmentId: itemId, oosId })
+      } else {
+        await returnSubItemFromOOS.mutateAsync({ subItemId: itemId, oosId })
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to return from service')
     }
@@ -56,7 +79,7 @@ export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{equipmentName} — Out of Service ({activeCount})</DialogTitle>
+          <DialogTitle>{itemName} — Out of Service ({activeCount})</DialogTitle>
         </DialogHeader>
 
         {/* Add new OOS record */}
@@ -96,9 +119,9 @@ export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
           <Button
             type="submit"
             className="w-full bg-red-600 hover:bg-red-700 text-white"
-            disabled={markOOS.isPending}
+            disabled={isMarkPending}
           >
-            {markOOS.isPending ? 'Saving…' : 'Mark Out of Service +'}
+            {isMarkPending ? 'Saving…' : 'Mark Out of Service +'}
           </Button>
         </form>
 
@@ -126,7 +149,7 @@ export function OOSDetailModal({ equipmentId, equipmentName, onClose }: Props) {
                   size="sm"
                   className="shrink-0 bg-green-600 hover:bg-green-700 text-white h-7 text-xs"
                   onClick={() => handleReturn(record.id)}
-                  disabled={returnFromOOS.isPending}
+                  disabled={isReturnPending}
                 >
                   ✓ Return to Service
                 </Button>

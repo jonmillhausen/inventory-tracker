@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
-import { useResolveIssueFlag, useMarkOOS } from '@/lib/queries/equipment'
+import { useResolveIssueFlag, useMarkOOS, useMarkSubItemOOS } from '@/lib/queries/equipment'
 import type { Database } from '@/lib/types/database.types'
 
 type IssueFlagRow = Database['public']['Tables']['issue_flag_items']['Row']
@@ -18,8 +20,12 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
   const [flags, setFlags] = useState<IssueFlagRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // When set, we're in the "confirm move to OOS" step for this flag
+  const [pendingOOS, setPendingOOS] = useState<{ flag: IssueFlagRow; returnDate: string } | null>(null)
+
   const mutation = useResolveIssueFlag()
   const markOOS = useMarkOOS()
+  const markSubItemOOS = useMarkSubItemOOS()
 
   useEffect(() => {
     const supabase = createClient()
@@ -35,17 +41,22 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
       })
   }, [itemId])
 
-  async function resolve(flag: IssueFlagRow, action: 'cleared' | 'moved_to_oos') {
+  async function resolve(flag: IssueFlagRow, action: 'cleared' | 'moved_to_oos', returnDate?: string | null) {
     try {
-      if (action === 'moved_to_oos' && flag.item_type === 'equipment') {
-        await markOOS.mutateAsync({
-          equipmentId: flag.item_id,
+      if (action === 'moved_to_oos') {
+        const shared = {
           quantity: flag.qty ?? 1,
           issue_description: flag.note ?? null,
-        })
+          expected_return_date: returnDate ?? null,
+        }
+        if (flag.item_type === 'equipment') {
+          await markOOS.mutateAsync({ equipmentId: flag.item_id, ...shared })
+        } else if (flag.item_type === 'sub_item') {
+          await markSubItemOOS.mutateAsync({ subItemId: flag.item_id, ...shared })
+        }
       }
       await mutation.mutateAsync({ id: flag.id, resolved_action: action })
-      // Derive new length inside the updater to avoid stale closure on `flags`
+      setPendingOOS(null)
       setFlags(prev => {
         const next = prev.filter(f => f.id !== flag.id)
         if (next.length === 0) onClose()
@@ -55,6 +66,8 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
       setError(err instanceof Error ? err.message : 'Failed to resolve flag')
     }
   }
+
+  const isPending = mutation.isPending || markOOS.isPending || markSubItemOOS.isPending
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -74,18 +87,64 @@ export function ResolveIssueFlagModal({ itemId, onClose }: Props) {
                 <span className="font-medium">{flag.qty} unit(s)</span>
                 {flag.note && <span className="text-gray-500"> — {flag.note}</span>}
               </p>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline"
-                  onClick={() => resolve(flag, 'cleared')}
-                  disabled={mutation.isPending || markOOS.isPending}>
-                  Clear
-                </Button>
-                <Button size="sm" variant="destructive"
-                  onClick={() => resolve(flag, 'moved_to_oos')}
-                  disabled={mutation.isPending || markOOS.isPending}>
-                  Move to OOS
-                </Button>
-              </div>
+
+              {/* Confirm Move to OOS step */}
+              {pendingOOS?.flag.id === flag.id ? (
+                <div className="space-y-2 pt-1">
+                  <div className="space-y-1">
+                    <Label htmlFor={`return-date-${flag.id}`} className="text-xs">
+                      Expected Return Date <span className="text-gray-400">(optional)</span>
+                    </Label>
+                    <Input
+                      id={`return-date-${flag.id}`}
+                      type="date"
+                      value={pendingOOS.returnDate}
+                      onChange={e => setPendingOOS(prev => prev ? { ...prev, returnDate: e.target.value } : null)}
+                      placeholder="mm/dd/yyyy"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => resolve(flag, 'moved_to_oos', pendingOOS.returnDate || null)}
+                      disabled={isPending}
+                    >
+                      Confirm Move to OOS
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => resolve(flag, 'moved_to_oos', null)}
+                      disabled={isPending}
+                    >
+                      Skip
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPendingOOS(null)}
+                      disabled={isPending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline"
+                    onClick={() => resolve(flag, 'cleared')}
+                    disabled={isPending}>
+                    Clear
+                  </Button>
+                  <Button size="sm" variant="destructive"
+                    onClick={() => setPendingOOS({ flag, returnDate: '' })}
+                    disabled={isPending}>
+                    Move to OOS
+                  </Button>
+                </div>
+              )}
             </div>
           ))}
         </div>

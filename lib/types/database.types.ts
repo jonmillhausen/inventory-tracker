@@ -144,7 +144,8 @@ export interface Database {
       equipment_oos: {
         Row: {
           id: string
-          equipment_id: string
+          equipment_id: string | null
+          sub_item_id: string | null
           quantity: number
           issue_description: string | null
           expected_return_date: string | null
@@ -152,7 +153,8 @@ export interface Database {
           created_at: string
         }
         Insert: {
-          equipment_id: string
+          equipment_id?: string | null
+          sub_item_id?: string | null
           quantity?: number
           issue_description?: string | null
           expected_return_date?: string | null
