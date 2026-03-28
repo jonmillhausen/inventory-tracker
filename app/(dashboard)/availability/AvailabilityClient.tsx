@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { useEquipment, useEquipmentSubItems } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useEquipmentOOSSums } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
@@ -148,6 +148,12 @@ export function AvailabilityClient({
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
   const { data: bookingsData = initialBookings } = useBookings(initialBookings)
   const { data: chains = [] } = useChains(initialChains)
+  const { data: oosSumsRaw = {} } = useEquipmentOOSSums()
+
+  const oosMap = useMemo(
+    () => new Map(Object.entries(oosSumsRaw)),
+    [oosSumsRaw]
+  )
 
   const rows = useMemo(
     () => calculateAvailability(
@@ -155,9 +161,10 @@ export function AvailabilityClient({
       subItems,
       bookingsData.bookings,
       bookingsData.bookingItems,
-      selectedDate
+      selectedDate,
+      oosMap
     ),
-    [equipment, subItems, bookingsData, selectedDate]
+    [equipment, subItems, bookingsData, selectedDate, oosMap]
   )
 
   const chainTimes = useMemo(

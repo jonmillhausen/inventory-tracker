@@ -120,6 +120,20 @@ describe('calculateAvailability', () => {
     expect(result[0].available_qty).toBe(3)
   })
 
+  it('uses oosMap over out_of_service when provided', () => {
+    const equipment = [makeEquipment({ total_qty: 5, out_of_service: 2 })]
+    const oosMap = new Map([[equipment[0].id, 3]])
+    const result = calculateAvailability(equipment, [], [], [], '2026-03-20', oosMap)
+    expect(result[0].available_qty).toBe(2)       // 5 - 3
+    expect(result[0].out_of_service).toBe(3)
+  })
+
+  it('falls back to out_of_service when oosMap not provided', () => {
+    const equipment = [makeEquipment({ total_qty: 5, out_of_service: 2 })]
+    const result = calculateAvailability(equipment, [], [], [], '2026-03-20')
+    expect(result[0].available_qty).toBe(3)       // 5 - 2
+  })
+
   it('availability is clamped to 0 when over-booked', () => {
     const equipment = [makeEquipment({ total_qty: 1 })]
     const bookings = [makeBooking()]

@@ -87,7 +87,8 @@ export function calculateAvailability(
   subItems: SubItemRow[],
   bookings: BookingRow[],
   bookingItems: BookingItemRow[],
-  date: string
+  date: string,
+  oosMap?: Map<string, number>
 ): AvailabilityRow[] {
   const bookingsById = new Map(bookings.map(b => [b.id, b]))
 
@@ -135,7 +136,8 @@ export function calculateAvailability(
     .filter(e => e.is_active)
     .map(e => {
       const total_booked = bookedByItemId.get(e.id) ?? 0
-      const remaining = e.total_qty - e.out_of_service - total_booked
+      const oos = oosMap?.get(e.id) ?? e.out_of_service
+      const remaining = e.total_qty - oos - total_booked
       const available_qty = Math.max(0, remaining)
 
       // Build chain_qty record
@@ -178,7 +180,7 @@ export function calculateAvailability(
         id: e.id,
         name: e.name,
         total_qty: e.total_qty,
-        out_of_service: e.out_of_service,
+        out_of_service: oos,
         issue_flag: e.issue_flag,
         booked_qty: total_booked,
         available_qty,
