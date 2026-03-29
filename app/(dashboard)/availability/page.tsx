@@ -17,13 +17,22 @@ export default async function AvailabilityPage() {
     { data: bookings },
     { data: bookingItems },
     { data: chains },
+    { data: oosRows },
   ] = await Promise.all([
     supabase.from('equipment').select('*').order('name'),
     supabase.from('equipment_sub_items').select('*').order('name'),
     supabase.from('bookings').select('*').neq('status', 'canceled'),
     supabase.from('booking_items').select('*'),
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
+    supabase.from('equipment_oos').select('equipment_id, quantity').not('equipment_id', 'is', null).is('returned_at', null),
   ])
+
+  const initialOosSums: Record<string, number> = {}
+  for (const row of oosRows ?? []) {
+    if (row.equipment_id) {
+      initialOosSums[row.equipment_id] = (initialOosSums[row.equipment_id] ?? 0) + row.quantity
+    }
+  }
 
   return (
     <AvailabilityClient
@@ -34,6 +43,7 @@ export default async function AvailabilityPage() {
         bookingItems: (bookingItems ?? []) as BookingItemRow[],
       }}
       initialChains={(chains ?? []) as ChainRow[]}
+      initialOosSums={initialOosSums}
     />
   )
 }

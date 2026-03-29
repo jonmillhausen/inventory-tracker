@@ -285,9 +285,10 @@ export function useEquipmentOOS(equipmentId: string) {
 }
 
 // Fetch active OOS quantity sum per equipment_id (used in equipment table + availability)
-export function useEquipmentOOSSums() {
+export function useEquipmentOOSSums(initialData?: Record<string, number>) {
   return useQuery({
     queryKey: EQUIPMENT_OOS_SUMS_KEY,
+    initialData,
     queryFn: async (): Promise<Record<string, number>> => {
       const supabase = createClient()
       const { data, error } = await supabase

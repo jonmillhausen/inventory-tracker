@@ -26,6 +26,7 @@ interface Props {
   initialSubItems: SubItemRow[]
   initialBookings: BookingsData
   initialChains: ChainRow[]
+  initialOosSums?: Record<string, number>
 }
 
 function prevDay(date: string): string {
@@ -138,6 +139,7 @@ export function AvailabilityClient({
   initialSubItems,
   initialBookings,
   initialChains,
+  initialOosSums,
 }: Props) {
   const [selectedDate, setSelectedDate] = usePersistedDate('date:availability')
   const [search, setSearch] = useState('')
@@ -148,7 +150,7 @@ export function AvailabilityClient({
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
   const { data: bookingsData = initialBookings } = useBookings(initialBookings)
   const { data: chains = [] } = useChains(initialChains)
-  const { data: oosSumsRaw = {} } = useEquipmentOOSSums()
+  const { data: oosSumsRaw = {} } = useEquipmentOOSSums(initialOosSums)
 
   const oosMap = useMemo(
     () => new Map(Object.entries(oosSumsRaw)),
