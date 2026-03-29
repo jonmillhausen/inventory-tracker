@@ -622,15 +622,20 @@ function parseV1Job(job: V1Job): ParsedJob {
             selected_options: (field.selected_options ?? []).map(mapOption),
           }))
 
-    const hasRealOptions = sfSelections.some(sel => (sel.selected_options?.length ?? 0) > 0)
-
     // Fallback: when service_fields is absent or empty, some v1 services surface
     // selected options only in pricing_summary[]. Parse quantity prefixes:
     //   "Nx Description"  (e.g. "3x Standard Cornhole" → qty=3)
     //   "N Bubbles/Bubble Balls" (old Bubble Ball format without "x" separator)
     // Duration entries like "1 Hour" are NOT matched by the bubble-specific path.
+    //
+    // IMPORTANT: when service_fields is present (even if the parsed options happen
+    // to be empty), it is the authoritative source — skip pricing_summary entirely
+    // to avoid double-counting.  The Lawn Games service sends both service_fields
+    // selected options AND the same games in pricing_summary; processing both
+    // results in 2× quantities for each item.
+    const hasServiceFields = (svc.service_fields?.length ?? 0) > 0
     const psSelections =
-      !hasRealOptions && (svc.pricing_summary?.length ?? 0) > 0
+      !hasServiceFields && (svc.pricing_summary?.length ?? 0) > 0
         ? [{
             selected_options: (svc.pricing_summary ?? [])
               .filter(ps => ps.type === 'service_option' && ps.description)
