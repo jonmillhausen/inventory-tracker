@@ -136,7 +136,7 @@ export function calculateAvailability(
     .filter(e => e.is_active)
     .map(e => {
       const total_booked = bookedByItemId.get(e.id) ?? 0
-      const oos = oosMap?.get(e.id) ?? e.out_of_service
+      const oos = oosMap?.get(e.id) ?? 0
       const available_qty = Math.max(0, e.total_qty - oos)
       const remaining = available_qty - total_booked
 
