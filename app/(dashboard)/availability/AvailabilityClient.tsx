@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { useEquipment, useEquipmentSubItems, useEquipmentOOSSums } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useEquipmentOOSSums, useEquipmentOOS } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
@@ -134,6 +134,53 @@ function ChainPopup({
   )
 }
 
+function OOSPopup({
+  equipmentId,
+  equipmentName,
+  onClose,
+}: {
+  equipmentId: string
+  equipmentName: string
+  onClose: () => void
+}) {
+  const { data: records = [], isLoading } = useEquipmentOOS(equipmentId)
+
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 top-full mt-1 z-20 w-72 bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-lg shadow-lg p-3 text-left"
+      onClick={e => e.stopPropagation()}
+    >
+      <div className="flex justify-between items-center mb-2">
+        <span className="font-semibold text-xs dark:text-gray-100">{equipmentName} — Out of Service</span>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-xs">✕</button>
+      </div>
+      {isLoading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : records.length === 0 ? (
+        <p className="text-xs text-gray-400">No active OOS records</p>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {records.map(r => (
+            <div key={r.id} className="bg-pink-50 dark:bg-red-900/20 rounded p-2 text-xs">
+              <p className="font-medium text-gray-900 dark:text-gray-100">
+                {r.quantity} {r.quantity === 1 ? 'unit' : 'units'}
+                {r.issue_description && ` — ${r.issue_description}`}
+              </p>
+              {r.expected_return_date ? (
+                <p className="text-blue-600 dark:text-blue-400 mt-0.5">
+                  Returns: {new Date(r.expected_return_date + 'T00:00:00').toLocaleDateString()}
+                </p>
+              ) : (
+                <p className="text-gray-400 mt-0.5">No return date set</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AvailabilityClient({
   initialEquipment,
   initialSubItems,
@@ -145,6 +192,7 @@ export function AvailabilityClient({
   const [search, setSearch] = useState('')
   const [bookedOnly, setBookedOnly] = useState(false)
   const [openChainPop, setOpenChainPop] = useState<string | null>(null)
+  const [selectedOosEquipmentId, setSelectedOosEquipmentId] = useState<string | null>(null)
 
   const { data: equipment = [] } = useEquipment(initialEquipment)
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
@@ -358,16 +406,28 @@ export function AvailabilityClient({
               {filteredRows.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-700/30'}>
                   <td className="px-4 py-2.5 font-medium text-sm">{row.name}</td>
-                  <td className="px-3 py-2.5 text-center">
-                    <span
-                      className={
-                        row.out_of_service > 0 || row.issue_flag > 0
-                          ? 'text-amber-600 font-medium'
-                          : 'text-gray-600 dark:text-gray-300'
-                      }
-                    >
-                      {row.available_qty}
-                    </span>
+                  <td className="px-3 py-2.5 text-center relative">
+                    {(oosSumsRaw[row.id] ?? 0) > 0 ? (
+                      <button
+                        className="text-amber-600 font-medium underline decoration-dotted underline-offset-2 cursor-pointer"
+                        onClick={() => setSelectedOosEquipmentId(
+                          selectedOosEquipmentId === row.id ? null : row.id
+                        )}
+                      >
+                        {row.available_qty}
+                      </button>
+                    ) : (
+                      <span className="text-gray-600 dark:text-gray-300">
+                        {row.available_qty}
+                      </span>
+                    )}
+                    {selectedOosEquipmentId === row.id && (
+                      <OOSPopup
+                        equipmentId={row.id}
+                        equipmentName={row.name}
+                        onClose={() => setSelectedOosEquipmentId(null)}
+                      />
+                    )}
                   </td>
                   {chainColumns.map(chain => (
                     <td key={chain.id} className="px-2 py-2.5 text-center font-mono text-xs">
@@ -419,11 +479,14 @@ export function AvailabilityClient({
         </div>
       </div>
 
-      {/* Click outside to close chain popup */}
-      {openChainPop && (
+      {/* Click outside to close chain popup or OOS popup */}
+      {(openChainPop || selectedOosEquipmentId) && (
         <div
           className="fixed inset-0 z-10"
-          onClick={() => setOpenChainPop(null)}
+          onClick={() => {
+            setOpenChainPop(null)
+            setSelectedOosEquipmentId(null)
+          }}
         />
       )}
     </div>
