@@ -2,8 +2,6 @@
 
 import React, { useState, useMemo } from 'react'
 import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums, useSubItemOOSSums } from '@/lib/queries/equipment'
-import { useBookings } from '@/lib/queries/bookings'
-import { calculateAvailability } from '@/lib/utils/availability'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
@@ -35,7 +33,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const deactivate = useDeactivateEquipment()
   const { data: oosSums = {} } = useEquipmentOOSSums()
   const { data: subItemOosSums = {} } = useSubItemOOSSums()
-  const { data: bookingsData = { bookings: [], bookingItems: [] } } = useBookings()
 
   // Modal state
   const [addingType, setAddingType] = useState<'primary' | 'sub_item' | null>(null)
@@ -47,12 +44,15 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
 
-  const todayET = useMemo(() => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), [])
-  const oosMap = useMemo(() => new Map(Object.entries(oosSums)), [oosSums])
+  // Avail. = total_qty - active_oos (no booking deduction)
   const availByEquipmentId = useMemo(() => {
-    const rows = calculateAvailability(equipment, [], bookingsData.bookings, bookingsData.bookingItems, todayET, oosMap)
-    return new Map(rows.map(r => [r.id, r.available_qty]))
-  }, [equipment, bookingsData, todayET, oosMap])
+    const map = new Map<string, number>()
+    for (const e of equipment) {
+      if (!e.is_active) continue
+      map.set(e.id, Math.max(0, e.total_qty - (oosSums[e.id] ?? 0)))
+    }
+    return map
+  }, [equipment, oosSums])
 
   // Sub-item available qty = total_qty - active_oos (no booking deduction)
   const subItemAvailById = useMemo(() => {

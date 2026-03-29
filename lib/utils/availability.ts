@@ -24,10 +24,10 @@ export interface AvailabilityRow {
   out_of_service: number
   issue_flag: number
   booked_qty: number       // backward compat (= total_booked)
-  available_qty: number    // Math.max(0, remaining) for backward compat
+  available_qty: number    // total_qty - oos (inventory — no booking deduction)
   chain_qty: Record<string, number>  // per-chain booked qty, key = chain name
   total_booked: number     // sum across all chains
-  remaining: number        // total_qty - out_of_service - total_booked (can be negative)
+  remaining: number        // available_qty - total_booked (can be negative)
   status: AvailabilityStatus
   sub_items: AvailabilitySubRow[]
 }
@@ -137,8 +137,8 @@ export function calculateAvailability(
     .map(e => {
       const total_booked = bookedByItemId.get(e.id) ?? 0
       const oos = oosMap?.get(e.id) ?? e.out_of_service
-      const remaining = e.total_qty - oos - total_booked
-      const available_qty = Math.max(0, remaining)
+      const available_qty = Math.max(0, e.total_qty - oos)
+      const remaining = available_qty - total_booked
 
       // Build chain_qty record
       const chainMap = chainQtyByItemId.get(e.id)

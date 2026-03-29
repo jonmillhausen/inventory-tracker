@@ -285,8 +285,7 @@ export function AvailabilityClient({
             <thead className="bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 text-left">
               <tr>
                 <th className="px-4 py-3 font-medium text-sm min-w-[160px]">Equipment</th>
-                <th className="px-3 py-3 font-medium text-center">Total</th>
-                <th className="px-3 py-3 font-medium text-center">Avail.</th>
+                <th className="px-3 py-3 font-medium text-center">Inventory</th>
 
                 {/* Chain columns with color badges and time ranges */}
                 {chainColumns.map(chain => {
@@ -347,7 +346,7 @@ export function AvailabilityClient({
               {filteredRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={6 + chainColumns.length}
+                    colSpan={5 + chainColumns.length}
                     className="px-4 py-8 text-center text-gray-400"
                   >
                     No active equipment
@@ -357,7 +356,6 @@ export function AvailabilityClient({
               {filteredRows.map((row, idx) => (
                 <tr key={row.id} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50/50 dark:bg-gray-700/30'}>
                   <td className="px-4 py-2.5 font-medium text-sm">{row.name}</td>
-                  <td className="px-3 py-2.5 text-center text-gray-500 dark:text-gray-400">{row.total_qty}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span
                       className={

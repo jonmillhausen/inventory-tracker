@@ -96,13 +96,14 @@ describe('calculateAvailability', () => {
     expect(result[0].booked_qty).toBe(0)
   })
 
-  it('subtracts booked quantity on matching date', () => {
+  it('subtracts booked quantity from remaining (not available_qty)', () => {
     const equipment = [makeEquipment({ total_qty: 3 })]
     const bookings = [makeBooking({ event_date: '2026-03-20' })]
     const items = [makeBookingItem({ qty: 2 })]
     const result = calculateAvailability(equipment, [], bookings, items, '2026-03-20')
     expect(result[0].booked_qty).toBe(2)
-    expect(result[0].available_qty).toBe(1)
+    expect(result[0].available_qty).toBe(3)  // inventory = total - oos (no booking deduction)
+    expect(result[0].remaining).toBe(1)       // remaining = inventory - booked
   })
 
   it('ignores bookings on other dates', () => {
@@ -134,12 +135,14 @@ describe('calculateAvailability', () => {
     expect(result[0].available_qty).toBe(3)       // 5 - 2
   })
 
-  it('availability is clamped to 0 when over-booked', () => {
+  it('overbooked: available_qty shows inventory, remaining goes negative', () => {
     const equipment = [makeEquipment({ total_qty: 1 })]
     const bookings = [makeBooking()]
     const items = [makeBookingItem({ qty: 3 })]
     const result = calculateAvailability(equipment, [], bookings, items, '2026-03-20')
-    expect(result[0].available_qty).toBe(0)
+    expect(result[0].available_qty).toBe(1)   // inventory = total - oos
+    expect(result[0].remaining).toBe(-2)       // 1 - 3 = -2 (overbooked)
+    expect(result[0].status).toBe('overbooked')
   })
 
   it('excludes inactive equipment', () => {
@@ -160,7 +163,8 @@ describe('calculateAvailability', () => {
     ]
     const result = calculateAvailability(equipment, [], bookings, items, '2026-03-20')
     expect(result[0].booked_qty).toBe(3)
-    expect(result[0].available_qty).toBe(2)
+    expect(result[0].available_qty).toBe(5)  // inventory = total - oos (no booking deduction)
+    expect(result[0].remaining).toBe(2)       // 5 - 3 = 2
   })
 
   it('includes sub-items grouped under parent', () => {
