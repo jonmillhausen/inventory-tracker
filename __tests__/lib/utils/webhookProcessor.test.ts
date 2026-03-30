@@ -1,4 +1,4 @@
-import { resolveWebhookItems } from '@/lib/utils/webhookProcessor'
+import { resolveWebhookItems, extractBookingFields } from '@/lib/utils/webhookProcessor'
 import type { ZenbookerService } from '@/lib/utils/webhookProcessor'
 
 const makeServiceMapping = (overrides = {}) => ({
@@ -204,6 +204,20 @@ describe('resolveWebhookItems', () => {
       [makeChainMapping()]
     )
     expect(result.chainId).toBeNull()
+  })
+
+  it('extracts start_time from start_date and computes end_time from estimated_duration_seconds', () => {
+    const payload = {
+      customer: { name: 'Bethany Bloom' },
+      service_address: { formatted: '123 Test Ave' },
+      start_date: '2026-04-15T09:00:00.000Z',
+      timezone: 'America/New_York',
+      estimated_duration_seconds: 7200,
+      time_slot: { start_time: null, end_time: null },
+    }
+    const result = extractBookingFields(payload as any)
+    expect(result.startTime).toBe('05:00')
+    expect(result.endTime).toBe('07:00')
   })
 
   it('base mapping fires at most once even when multiple options go unmatched', () => {

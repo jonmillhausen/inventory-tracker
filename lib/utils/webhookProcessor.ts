@@ -137,11 +137,25 @@ export function calcEndTime(startTime: string, durationSeconds: number): string 
  * Extract booking fields from a v3 payload's data object.
  * Handles missing end_time by computing it from start_time + estimated_duration_seconds.
  */
+function extractTimeFromStartDate(startDate: string | undefined, timezone: string | undefined): string | null {
+  if (!startDate) return null
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone ?? 'America/New_York',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(startDate))
+  } catch {
+    return null
+  }
+}
+
 export function extractBookingFields(data: ZenbookerPayload['data']) {
   const customerName = data.customer?.name ?? ''
   const address = data.service_address?.formatted ?? ''
   const eventDate = extractEventDate(data.start_date, data.timezone)
-  const startTime = data.time_slot?.start_time ?? null
+  const startTime = data.time_slot?.start_time ?? extractTimeFromStartDate(data.start_date, data.timezone)
   let endTime = data.time_slot?.end_time ?? null
   if (!endTime && startTime && data.estimated_duration_seconds) {
     endTime = calcEndTime(startTime, data.estimated_duration_seconds)
