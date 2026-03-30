@@ -43,6 +43,14 @@ function timeToMin(time: string | null | undefined): number {
   return h * 60 + (m || 0)
 }
 
+function getEndTimeMinutes(booking: BookingRow): number {
+  const endMinutes = timeToMin(booking.end_time)
+  if (booking.end_date && booking.event_date && booking.end_date > booking.event_date) {
+    return endMinutes + 24 * 60
+  }
+  return endMinutes
+}
+
 function formatTime12(time: string | null | undefined): string {
   if (!time) return '—'
   const [h, m] = time.split(':').map(Number)
@@ -248,7 +256,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
       for (let i = 1; i < evts.length; i++) {
         const prev = evts[i - 1]
         const curr = evts[i]
-        const prevSeqEnd = timeToMin(prev.end_time) + getSetup(prev, bookingItems, equipmentMap).after
+        const prevSeqEnd = getEndTimeMinutes(prev) + getSetup(prev, bookingItems, equipmentMap).after
         const fromAddr = prev.address ?? BASE_ADDRESS
         const toAddr = curr.address ?? ''
         const travel = toAddr ? getTravelInfo(fromAddr, toAddr).minutes : FALLBACK_TRAVEL_MIN
@@ -431,7 +439,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
 
                   {evts.map((booking, bi) => {
                     const s = timeToMin(booking.start_time)
-                    const e = timeToMin(booking.end_time)
+                    const e = getEndTimeMinutes(booking)
                     const su = getSetup(booking, bookingItems, equipmentMap)
                     const eventHeight = Math.max((e - s) * PX_PER_MIN, 20)
                     const fromAddr = bi === 0 ? BASE_ADDRESS : (evts[bi - 1].address ?? BASE_ADDRESS)
@@ -457,13 +465,13 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                             style={{
                               top: bi === 0
                                 ? yPos(Math.max(s - su.before - travelInfo.minutes, START_H * 60))
-                                : yPos(timeToMin(evts[bi - 1].end_time) + getSetup(evts[bi - 1], bookingItems, equipmentMap).after),
+                                : yPos(getEndTimeMinutes(evts[bi - 1]) + getSetup(evts[bi - 1], bookingItems, equipmentMap).after),
                               height: bi === 0
                                 ? travelInfo.minutes * PX_PER_MIN
                                 : Math.max(
                                     Math.min(
                                       travelInfo.minutes,
-                                      Math.max(s - su.before - timeToMin(evts[bi - 1].end_time) - getSetup(evts[bi - 1], bookingItems, equipmentMap).after, 0)
+                                      Math.max(s - su.before - getEndTimeMinutes(evts[bi - 1]) - getSetup(evts[bi - 1], bookingItems, equipmentMap).after, 0)
                                     ),
                                     0
                                   ) * PX_PER_MIN || travelInfo.minutes * PX_PER_MIN,
