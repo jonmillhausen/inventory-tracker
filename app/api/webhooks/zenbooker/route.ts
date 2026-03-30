@@ -19,6 +19,7 @@ const PROCESSABLE_ACTIONS = new Set([
   'job.canceled',
   'job.service_order.edited',
   'job.assigned',
+  'job.service_providers.assigned',
   'job.completed',
   'job.started',
 ])
@@ -125,7 +126,7 @@ export async function POST(request: Request) {
   }))
 
   // ── Actions that update an existing booking ──────────────────────────────
-  const UPDATE_ACTIONS = new Set(['job.assigned', 'job.completed', 'job.canceled', 'job.rescheduled', 'job.service_order.edited'])
+  const UPDATE_ACTIONS = new Set(['job.assigned', 'job.service_providers.assigned', 'job.completed', 'job.canceled', 'job.rescheduled', 'job.service_order.edited'])
 
   if (UPDATE_ACTIONS.has(action)) {
     try {
@@ -145,7 +146,7 @@ export async function POST(request: Request) {
 
       const bookingId = existingBooking.id
 
-      if (action === 'job.assigned') {
+      if (action === 'job.assigned' || action === 'job.service_providers.assigned') {
         const { data: chainMappingsRaw } = await supabase.from('chain_mappings').select('*')
         const chainMappings = (chainMappingsRaw ?? []) as ChainMappingRow[]
         let chainId: string | null = null

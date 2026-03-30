@@ -146,6 +146,23 @@ describe('resolveWebhookItems', () => {
     expect(result.resolvedItems.map(r => r.item_id)).toEqual(['elite_laser_tag', 'basic_laser_tag'])
   })
 
+  it('prefers service_fields options and skips pricing_summary when service_fields are present', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Lawn Games',
+      service_fields: [
+        { selected_options: [{ id: 'field_opt_1', text: 'Mega Jenga', quantity: 1 }] },
+      ],
+      pricing_summary: [
+        { type: 'service_option', description: 'Mega Jenga', amount: 0 },
+      ],
+    }
+    const sm = makeServiceMapping({ zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'field_opt_1', item_id: 'mega_jenga' })
+    const result = resolveWebhookItems([svc], [], [sm], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].item_id).toBe('mega_jenga')
+  })
+
   it('resolves one option to multiple items when multiple modifier rows exist', () => {
     const svc: ZenbookerService = {
       service_id: 'svc1',

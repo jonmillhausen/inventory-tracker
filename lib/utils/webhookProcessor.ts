@@ -9,8 +9,23 @@ type ChainMappingRow = Database['public']['Tables']['chain_mappings']['Row']
 export interface ZenbookerSelectedOption {
   id: string
   text: string      // display label in v3
+  name?: string     // legacy v1 alias
   quantity?: number // customer-supplied quantity
   price?: number    // unit price; options with price > 0 are equipment selections
+}
+
+export interface ZenbookerServiceField {
+  field_id?: string
+  field_name?: string
+  field_type?: string
+  value?: string | number
+  selected_options?: ZenbookerSelectedOption[]
+}
+
+export interface ZenbookerPricingSummaryItem {
+  type?: string
+  amount?: number
+  description?: string
 }
 
 export interface ZenbookerService {
@@ -19,6 +34,8 @@ export interface ZenbookerService {
   service_selections?: Array<{
     selected_options?: ZenbookerSelectedOption[]
   }>
+  service_fields?: ZenbookerServiceField[]
+  pricing_summary?: ZenbookerPricingSummaryItem[]
 }
 
 // Zenbooker webhook v3 (2025-09-01) payload shape.
@@ -209,8 +226,54 @@ export function resolveWebhookItems(
   const nameFallbacks: NameFallback[] = []
 
   for (const svc of services) {
-    const allOptions = (svc.service_selections ?? [])
-      .flatMap(sel => sel.selected_options ?? [])
+    const hasServiceFields = (svc.service_fields?.length ?? 0) > 0
+
+    const selections = hasServiceFields
+      ? (svc.service_fields ?? []).map(field => ({
+          selected_options: (field.selected_options ?? []).map(opt => ({
+            id: opt.id ?? '',
+            text: opt.text ?? opt.name ?? '',
+            quantity: opt.quantity,
+            price: opt.price,
+          })),
+        }))
+      : (svc.service_selections ?? [])
+
+    const pricingSummarySelections = !hasServiceFields && (svc.pricing_summary?.length ?? 0) > 0
+      ? [{
+          selected_options: (svc.pricing_summary ?? [])
+            .filter(ps => ps.type === 'service_option' && ps.description)
+            .map(ps => {
+              const desc = ps.description!
+              const nxMatch = desc.match(/^(\d+)[x×]\s*(.+)$/i)
+              if (nxMatch) {
+                return {
+                  id: '',
+                  text: nxMatch[2].trim(),
+                  quantity: parseInt(nxMatch[1], 10),
+                  price: ps.amount !== undefined ? Number(ps.amount) : undefined,
+                }
+              }
+              const bubbleMatch = /bubble/i.test(desc) ? desc.match(/^(\d+)\s+(.+)$/i) : null
+              if (bubbleMatch) {
+                return {
+                  id: '',
+                  text: bubbleMatch[2].trim(),
+                  quantity: parseInt(bubbleMatch[1], 10),
+                  price: ps.amount !== undefined ? Number(ps.amount) : undefined,
+                }
+              }
+              return {
+                id: '',
+                text: desc,
+                quantity: 1,
+                price: ps.amount !== undefined ? Number(ps.amount) : undefined,
+              }
+            }),
+        }]
+      : []
+
+    const allOptions = [...(selections.flatMap(sel => sel.selected_options ?? [])), ...(pricingSummarySelections.flatMap(sel => sel.selected_options ?? []))]
 
     // All base mappings: service_id match with no modifier (modifier_id IS NULL).
     // Multiple rows are allowed (e.g. a service that maps to 2 pieces of equipment).
