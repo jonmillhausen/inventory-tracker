@@ -13,6 +13,8 @@ import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
 import { ChevronDown, ChevronRight, Flag, X } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
+const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'GameTruck', 'Lawn Games', 'Add-Ons'] as const
+
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
 type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
@@ -44,6 +46,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [resolveFlagItemId, setResolveFlagItemId] = useState<string | null>(null)
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([])
 
   // Avail. = total_qty - active_oos (no booking deduction)
   const availByEquipmentId = useMemo(() => {
@@ -70,10 +73,19 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
 
   // Filtered equipment for table display
   const filteredEquipment = useMemo(() => {
-    if (equipmentFilter === 'damaged') return activeEquipment.filter(e => (oosSums[e.id] ?? 0) >= 1)
-    if (equipmentFilter === 'flags') return activeEquipment.filter(e => e.issue_flag >= 1)
-    return activeEquipment
-  }, [activeEquipment, equipmentFilter])
+    let filtered = activeEquipment
+    if (equipmentFilter === 'damaged') {
+      filtered = filtered.filter(e => (oosSums[e.id] ?? 0) >= 1)
+    }
+    if (equipmentFilter === 'flags') {
+      filtered = filtered.filter(e => e.issue_flag >= 1)
+    }
+    if (categoryFilters.length > 0) {
+      const selected = new Set(categoryFilters)
+      filtered = filtered.filter(e => (e.categories ?? []).some(cat => selected.has(cat)))
+    }
+    return filtered
+  }, [activeEquipment, equipmentFilter, categoryFilters, oosSums])
 
   // Map sub-items by id
   const subItemMap = useMemo(() => new Map(subItems.map(s => [s.id, s])), [subItems])
@@ -134,7 +146,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl font-semibold">Equipment</h1>
           {/* Filter buttons */}
-          <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {(['all', 'damaged', 'flags'] as const).map(f => {
               const labels = { all: 'All Equipment', damaged: 'Out of Service Only', flags: 'Flags Only' }
               return (
@@ -151,6 +163,27 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                 </button>
               )
             })}
+            <span className="text-gray-300">|</span>
+            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filter:</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {CATEGORY_FILTER_OPTIONS.map(option => (
+                <label key={option} className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
+                  <input
+                    type="checkbox"
+                    checked={categoryFilters.includes(option)}
+                    onChange={() => {
+                      setCategoryFilters(prev =>
+                        prev.includes(option)
+                          ? prev.filter(value => value !== option)
+                          : [...prev, option]
+                      )
+                    }}
+                    className="accent-blue-500"
+                  />
+                  {option}
+                </label>
+              ))}
+            </div>
           </div>
         </div>
         {canAdmin(role) && (
@@ -189,7 +222,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                 <React.Fragment key={e.id}>
                   {/* Parent row */}
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                    <td className="px-4 py-3 font-bold">
+                    <td className="px-4 py-3 font-semibold">
                       <div className="flex items-center gap-2">
                         {subs.length > 0 ? (
                           <button
@@ -200,7 +233,9 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           >
                             {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                           </button>
-                        ) : null}
+                        ) : (
+                          <span className="inline-grid h-7 w-7" aria-hidden="true" />
+                        )}
                         <span>{e.name}</span>
                       </div>
                     </td>

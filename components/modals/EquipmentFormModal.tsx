@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ChangeEvent } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,10 +25,10 @@ export function EquipmentFormModal({ item, onClose }: Props) {
   const [categories, setCategories] = useState<string[]>(item?.categories ?? [])
   const [error, setError] = useState<string | null>(null)
 
-  function toggleCategory(cat: string) {
-    setCategories(prev =>
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    )
+  const CATEGORY_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
+
+  function handleCategoryChange(event: ChangeEvent<HTMLSelectElement>) {
+    setCategories(Array.from(event.target.selectedOptions, option => option.value))
   }
 
   const create = useCreateEquipment()
@@ -101,20 +101,20 @@ export function EquipmentFormModal({ item, onClose }: Props) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Categories</Label>
-            <div className="flex flex-wrap gap-2">
-              {['Premium', 'Inflatable', 'Specialty', 'GameTruck', 'Lawn Game'].map(cat => (
-                <label key={cat} className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={categories.includes(cat)}
-                    onChange={() => toggleCategory(cat)}
-                    className="accent-blue-500"
-                  />
-                  <span className="text-sm">{cat}</span>
-                </label>
+            <Label htmlFor="categories">Categories</Label>
+            <select
+              id="categories"
+              multiple
+              size={4}
+              value={categories.filter(cat => CATEGORY_OPTIONS.includes(cat as any))}
+              onChange={handleCategoryChange}
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+            >
+              {CATEGORY_OPTIONS.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
               ))}
-            </div>
+            </select>
+            <p className="text-xs text-gray-500">Select one or more fixed categories. GameTruck is not editable here.</p>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <DialogFooter>
