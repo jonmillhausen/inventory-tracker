@@ -60,8 +60,9 @@ function formatTime12(time: string | null | undefined): string {
 }
 
 function formatHour(h: number): string {
-  if (h === 12) return '12p'
-  return h < 12 ? `${h}a` : `${h - 12}p`
+  const hour = h % 12 || 12
+  const suffix = h >= 12 ? 'pm' : 'am'
+  return `${hour}${suffix}`
 }
 
 function isLightColor(hex: string): boolean {
@@ -381,7 +382,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                   className="absolute left-0 right-0 text-right pr-1"
                   style={{ top: yPos(h * 60) - 6 }}
                 >
-                  <span className="text-gray-700 dark:text-gray-400">
+                  <span className="text-xs text-gray-700 dark:text-gray-400">
                     {formatHour(h)}
                   </span>
                 </div>
