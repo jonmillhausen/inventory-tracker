@@ -120,9 +120,9 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
   const bookings = data?.bookings ?? []
   const bookingItems = data?.bookingItems ?? []
 
-  // 14 dates starting from anchorDate
+  // 28 dates starting from anchorDate
   const dates = useMemo(
-    () => Array.from({ length: 14 }, (_, i) => addDays(anchorDate, i)),
+    () => Array.from({ length: 28 }, (_, i) => addDays(anchorDate, i)),
     [anchorDate],
   )
 
@@ -132,7 +132,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
     [dates],
   )
 
-  // Compute cells for all 14 dates
+  // Compute cells for all 28 dates
   const cells = useMemo(
     () => dates.map(date => computeDayCell(date, bookings, bookingItems, equipment, chains)),
     [dates, bookings, bookingItems, equipment, chains],
@@ -230,7 +230,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold">2-Week Audit</h1>
+        <h1 className="text-xl font-semibold">Event Audit</h1>
         <button
           onClick={() => setAnchorDate(todayStr())}
           className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
@@ -264,14 +264,42 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
       {/* Week 2 */}
       <div>
         <div className="grid grid-cols-7 gap-1.5 mb-1">
-          {dates.slice(7, 14).map((d, i) => (
+          {dowLabels.map((dow, i) => (
             <div key={i} className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 text-center px-1">
-              {formatDayOfWeek(d)}
+              {dow}
             </div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1.5">
           {cells.slice(7, 14).map(cell => renderCell(cell, cell.date === today))}
+        </div>
+      </div>
+
+      {/* Week 3 */}
+      <div>
+        <div className="grid grid-cols-7 gap-1.5 mb-1">
+          {dowLabels.map((dow, i) => (
+            <div key={i} className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 text-center px-1">
+              {dow}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {cells.slice(14, 21).map(cell => renderCell(cell, cell.date === today))}
+        </div>
+      </div>
+
+      {/* Week 4 */}
+      <div>
+        <div className="grid grid-cols-7 gap-1.5 mb-1">
+          {dowLabels.map((dow, i) => (
+            <div key={i} className="text-[11px] font-semibold text-gray-400 dark:text-gray-500 text-center px-1">
+              {dow}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-1.5">
+          {cells.slice(21, 28).map(cell => renderCell(cell, cell.date === today))}
         </div>
       </div>
     </div>
