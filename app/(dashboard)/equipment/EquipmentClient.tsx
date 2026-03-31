@@ -10,7 +10,7 @@ import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
 import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
 import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
-import { ChevronDown, ChevronRight, Flag, Pencil, X, XCircle } from 'lucide-react'
+import { Ban, CheckCircle, ChevronDown, ChevronRight, Flag, Pencil } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
 const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
@@ -233,11 +233,15 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium text-center">Total</th>
-              <th className="px-4 py-3 font-medium text-center">Avail.</th>
-              <th className="px-4 py-3 font-medium text-center">Loadout</th>
               <th className="px-4 py-3 font-medium text-center">
                 <span className="inline-flex items-center gap-1 justify-center">
-                  <XCircle size={14} className="text-red-500" />
+                  <CheckCircle size={14} className="text-green-500" />
+                  In Service
+                </span>
+              </th>
+              <th className="px-4 py-3 font-medium text-center">
+                <span className="inline-flex items-center gap-1 justify-center">
+                  <Ban size={14} className="text-red-500" />
                   Out of Service
                 </span>
               </th>
@@ -284,7 +288,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                         return <span className={avail > 0 ? 'text-green-600' : 'text-red-600'}>{avail}</span>
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-300 dark:text-gray-600">—</td>
                     <td className="px-4 py-3 text-center">
                       <div className="inline-flex items-center gap-1.5">
                         {(oosSums[e.id] ?? 0) > 0 ? (
@@ -333,7 +336,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           className="h-8 w-8 rounded-md border border-red-500 text-red-500 grid place-items-center hover:bg-red-500 hover:text-white transition-colors"
                           aria-label={`Mark ${e.name} out of service`}
                         >
-                          <X size={14} />
+                          <Ban size={14} />
                         </button>
                         {canCreateIssueFlag(role) && (
                           <button
@@ -355,12 +358,16 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     const subAvail = subItemAvailById.get(sub.id) ?? 0
                     return (
                       <tr key={sub.id} className="bg-gray-50/50 dark:bg-gray-700/30 text-gray-600 dark:text-gray-400 text-xs">
-                        <td className="px-4 py-2 pl-10">{sub.name}</td>
+                        <td className="px-4 py-2 pl-10">
+                          <span>{sub.name}</span>
+                          {loadout_qty > 0 && (
+                            <span className="text-blue-500 font-medium"> (x{loadout_qty})</span>
+                          )}
+                        </td>
                         <td className="px-4 py-2 text-center">{sub.total_qty}</td>
                         <td className="px-4 py-2 text-center font-medium">
                           <span className={subAvail > 0 ? 'text-green-600' : 'text-red-600'}>{subAvail}</span>
                         </td>
-                        <td className="px-4 py-2 text-center font-medium text-blue-700">{loadout_qty}</td>
                         <td className="px-4 py-2 text-center">
                           <div className="inline-flex items-center gap-1">
                             {subOos > 0 ? (
@@ -409,7 +416,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                               className="h-8 w-8 rounded-md border border-red-500 text-red-500 grid place-items-center hover:bg-red-500 hover:text-white transition-colors"
                               aria-label={`Mark ${sub.name} out of service`}
                             >
-                              <X size={14} />
+                              <Ban size={14} />
                             </button>
                             {canCreateIssueFlag(role) && (
                               <button
