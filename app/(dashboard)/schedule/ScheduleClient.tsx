@@ -141,6 +141,10 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   const [showTravel, setShowTravel] = useState(true)
   const [showSetup, setShowSetup] = useState(true)
   const [popupId, setPopupId] = useState<string | null>(null)
+  const [travelCalcFrom, setTravelCalcFrom] = useState(BASE_ADDRESS)
+  const [travelCalcResult, setTravelCalcResult] = useState<TravelInfo | null>(null)
+  const [travelCalcLoading, setTravelCalcLoading] = useState(false)
+  const [travelCalcError, setTravelCalcError] = useState<string | null>(null)
   // travelTimes: key = "${from}::${to}", value = { minutes, hasToll }
   const [travelTimes, setTravelTimes] = useState<Map<string, TravelInfo>>(new Map())
 
@@ -161,6 +165,11 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   const activeBookings = useMemo(
     () => bookings.filter(b => isBookingActiveOnDate(b, selectedDate)),
     [bookings, selectedDate],
+  )
+
+  const popupBooking = useMemo(
+    () => activeBookings.find(b => b.id === popupId) ?? null,
+    [activeBookings, popupId],
   )
 
   // Build chain columns: active chains that have bookings + unassigned
@@ -242,6 +251,34 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   useEffect(() => {
     fetchAllTravelTimes()
   }, [fetchAllTravelTimes])
+
+  useEffect(() => {
+    if (!popupBooking) return
+
+    const col = columns.find(c => c.bookings.some(b => b.id === popupBooking.id))
+    const bookingIndex = col?.bookings.findIndex(b => b.id === popupBooking.id) ?? -1
+    const defaultFrom = bookingIndex > 0 ? (col?.bookings[bookingIndex - 1].address ?? BASE_ADDRESS) : BASE_ADDRESS
+
+    setTravelCalcFrom(defaultFrom)
+    setTravelCalcResult(null)
+    setTravelCalcError(null)
+  }, [popupBooking, columns])
+
+  const calculatePopupTravel = useCallback(async (booking: BookingRow) => {
+    if (!booking.address) return
+
+    setTravelCalcLoading(true)
+    setTravelCalcError(null)
+
+    try {
+      const result = await fetchTravelInfo(travelCalcFrom, booking.address, selectedDate, booking.start_time ?? '08:00')
+      setTravelCalcResult(result)
+    } catch {
+      setTravelCalcError('Unable to calculate travel time')
+    } finally {
+      setTravelCalcLoading(false)
+    }
+  }, [selectedDate, travelCalcFrom])
 
   function getTravelInfo(from: string, to: string): TravelInfo {
     return travelTimes.get(`${from}::${to}`) ?? { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
@@ -564,6 +601,42 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                                 {booking.address}
                               </div>
                             )}
+
+                            <div className="space-y-2 mb-2">
+                              <div className="text-gray-400 uppercase tracking-[0.2em] text-[10px]">
+                                Travel estimate
+                              </div>
+                              <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                <Input
+                                  value={travelCalcFrom}
+                                  onChange={e => {
+                                    setTravelCalcFrom(e.target.value)
+                                    setTravelCalcResult(null)
+                                    setTravelCalcError(null)
+                                  }}
+                                  placeholder="From address"
+                                  className="min-w-0"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => calculatePopupTravel(booking)}
+                                  disabled={travelCalcLoading || !booking.address || !travelCalcFrom.trim()}
+                                  className="inline-flex items-center justify-center rounded bg-blue-500 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                  {travelCalcLoading ? 'Calculating…' : 'Estimate'}
+                                </button>
+                              </div>
+                              {!booking.address && (
+                                <div className="text-xs text-red-500">Event address is required to calculate travel time.</div>
+                              )}
+                              {travelCalcResult && booking.address && (
+                                <div className="text-xs text-gray-700">
+                                  Estimated travel from <span className="font-semibold">{travelCalcFrom}</span> to <span className="font-semibold">{booking.address}</span>: <span className="font-semibold">{travelCalcResult.minutes}m</span>
+                                  {travelCalcResult.hasToll ? ' · Toll route likely' : ' · Toll-free route available'}
+                                </div>
+                              )}
+                              {travelCalcError && <div className="text-xs text-red-500">{travelCalcError}</div>}
+                            </div>
 
                             {items.length > 0 && (
                               <div>
