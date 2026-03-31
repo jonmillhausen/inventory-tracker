@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useEquipmentOOSSums, useSubItemOOSSums } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useDeactivateSubItem, useEquipmentOOSSums, useSubItemOOSSums } from '@/lib/queries/equipment'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { IssueFlagModal } from '@/components/modals/IssueFlagModal'
@@ -10,7 +10,7 @@ import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
 import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
 import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
-import { ChevronDown, ChevronUp, Flag, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Flag, X } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
@@ -31,6 +31,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
+  const deactivateSubItem = useDeactivateSubItem()
   const { data: oosSums = {} } = useEquipmentOOSSums()
   const { data: subItemOosSums = {} } = useSubItemOOSSums()
 
@@ -189,7 +190,19 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                   {/* Parent row */}
                   <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                     <td className="px-4 py-3 font-bold">
-                      {e.name}
+                      <div className="flex items-center gap-2">
+                        {subs.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleParent(e.id)}
+                            className="grid place-items-center h-7 w-7 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            aria-label={isExpanded ? `Collapse ${e.name} sub-items` : `Expand ${e.name} sub-items`}
+                          >
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        ) : null}
+                        <span>{e.name}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{e.total_qty}</td>
                     <td className="px-4 py-3 text-center font-medium">
@@ -249,32 +262,6 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     </td>
                   </tr>
 
-                  {/* Supplies toggle row */}
-                  {subs.length > 0 && (
-                    <tr className="bg-gray-50/30 dark:bg-gray-700/20">
-                      <td className="px-4 py-1" colSpan={4}>
-                        <button
-                          onClick={() => toggleParent(e.id)}
-                          className="flex items-center gap-1 text-xs text-gray-500 font-semibold hover:text-gray-700"
-                        >
-                          {isExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
-                          {e.name} Supplies ({subs.length})
-                        </button>
-                      </td>
-                      <td className="px-4 py-1 text-center">
-                        {!isExpanded && subStatus?.hasDamage
-                          ? <X size={14} className="text-red-400 mx-auto" />
-                          : ''}
-                      </td>
-                      <td className="px-4 py-1 text-center">
-                        {!isExpanded && subStatus?.hasFlags
-                          ? <Flag size={14} className="text-orange-400 mx-auto" />
-                          : ''}
-                      </td>
-                      <td />
-                    </tr>
-                  )}
-
                   {/* Sub-item rows */}
                   {isExpanded && subs.map(({ sub, loadout_qty }) => {
                     const subOos = subItemOosSums[sub.id] ?? 0
@@ -318,7 +305,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           ) : '—'}
                         </td>
                         <td className="px-4 py-2">
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 flex-wrap">
                             {canCreateIssueFlag(role) && (
                               <Button size="sm" variant="outline" className="h-6 text-xs"
                                 onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
@@ -326,10 +313,17 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                               </Button>
                             )}
                             {canAdmin(role) && (
-                              <Button size="sm" variant="outline" className="h-6 text-xs"
-                                onClick={() => setEditSubItem(sub)}>
-                                Edit
-                              </Button>
+                              <>
+                                <Button size="sm" variant="outline" className="h-6 text-xs"
+                                  onClick={() => setEditSubItem(sub)}>
+                                  Edit
+                                </Button>
+                                <Button size="sm" variant="outline" className="h-6 text-xs"
+                                  onClick={() => deactivateSubItem.mutate({ parentId: e.id, subId: sub.id })}
+                                  disabled={deactivateSubItem.isPending}>
+                                  Deactivate
+                                </Button>
+                              </>
                             )}
                           </div>
                         </td>

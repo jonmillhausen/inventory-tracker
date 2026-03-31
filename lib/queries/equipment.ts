@@ -111,6 +111,20 @@ export function useDeactivateEquipment() {
   })
 }
 
+export function useDeactivateSubItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ parentId, subId }: { parentId: string; subId: string }) => {
+      const res = await fetch(`/api/equipment/${parentId}/sub-items/${subId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await res.text())
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+    },
+  })
+}
+
 export function useCreateSubItem() {
   const qc = useQueryClient()
   return useMutation({
