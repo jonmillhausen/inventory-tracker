@@ -15,10 +15,11 @@ export async function PATCH(
 
   const { subId } = await params
   const body = await request.json()
-  const { name, total_qty, links } = body as {
+  const { name, total_qty, links, is_active } = body as {
     name?: string
     total_qty?: number
     links?: Array<{ parent_id: string; loadout_qty: number }>
+    is_active?: boolean
   }
 
   const supabase = await createClient()
@@ -27,6 +28,7 @@ export async function PATCH(
   const updateFields: Record<string, unknown> = {}
   if (name !== undefined) updateFields.name = name
   if (total_qty !== undefined) updateFields.total_qty = total_qty
+  if (is_active !== undefined) updateFields.is_active = is_active
 
   if (Object.keys(updateFields).length > 0) {
     const { error } = await supabase
@@ -68,4 +70,22 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
+}
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ subId: string }> }
+) {
+  const auth = await getSessionAndRole(['admin'])
+  if (auth instanceof NextResponse) return auth
+
+  const { subId } = await params
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('equipment_sub_items')
+    .delete()
+    .eq('id', subId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return new NextResponse(null, { status: 204 })
 }

@@ -13,7 +13,7 @@ import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
 import { ChevronDown, ChevronRight, Flag, X } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
-const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'GameTruck', 'Lawn Games', 'Add-Ons'] as const
+const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
 
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
@@ -164,8 +164,8 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
               )
             })}
             <span className="text-gray-300">|</span>
-            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filter:</span>
-            <div className="flex flex-wrap items-center gap-2">
+            <span className="text-base font-medium text-gray-600 dark:text-gray-300">Filter:</span>
+            <div className="flex flex-wrap items-center gap-5">
               {CATEGORY_FILTER_OPTIONS.map(option => (
                 <label key={option} className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
                   <input

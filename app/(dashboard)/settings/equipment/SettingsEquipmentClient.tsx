@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useMemo, useState } from 'react'
-import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useSubItemLinks, useDeactivateEquipment, useReactivateEquipment, useDeleteEquipment, useReactivateSubItem, useDeleteSubItem } from '@/lib/queries/equipment'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
@@ -23,6 +23,10 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems, ini
   const { data: subItems = [] } = useEquipmentSubItems(initialSubItems)
   const { data: subItemLinks = [] } = useSubItemLinks(initialSubItemLinks)
   const deactivate = useDeactivateEquipment()
+  const reactivate = useReactivateEquipment()
+  const deleteEquipment = useDeleteEquipment()
+  const reactivateSubItem = useReactivateSubItem()
+  const deleteSubItem = useDeleteSubItem()
 
   const [addEquipment, setAddEquipment] = useState(false)
   const [editItem, setEditItem] = useState<EquipmentRow | null>(null)
@@ -85,14 +89,31 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems, ini
                       : <Badge variant="outline">Inactive</Badge>}
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button size="sm" variant="outline" onClick={() => setEditItem(e)}>Edit</Button>
-                      {e.is_active && (
+                      {e.is_active ? (
                         <Button size="sm" variant="outline"
                           onClick={() => deactivate.mutate(e.id)}
                           disabled={deactivate.isPending}>
                           Deactivate
                         </Button>
+                      ) : (
+                        <>
+                          <Button size="sm" variant="outline"
+                            onClick={() => reactivate.mutate(e.id)}
+                            disabled={reactivate.isPending}>
+                            Reactivate
+                          </Button>
+                          <Button size="sm" variant="destructive"
+                            onClick={() => {
+                              if (window.confirm('Are you sure? This cannot be undone.')) {
+                                deleteEquipment.mutate(e.id)
+                              }
+                            }}
+                            disabled={deleteEquipment.isPending}>
+                            Delete
+                          </Button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -108,10 +129,30 @@ export function SettingsEquipmentClient({ initialEquipment, initialSubItems, ini
                         : <Badge variant="outline" className="text-xs">Inactive</Badge>}
                     </td>
                     <td className="px-4 py-2">
-                      <Button size="sm" variant="outline" className="h-6 text-xs"
-                        onClick={() => setEditSubItem(s)}>
-                        Edit
-                      </Button>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" variant="outline" className="h-6 text-xs"
+                          onClick={() => setEditSubItem(s)}>
+                          Edit
+                        </Button>
+                        {!s.is_active && (
+                          <>
+                            <Button size="sm" variant="outline" className="h-6 text-xs"
+                              onClick={() => reactivateSubItem.mutate(s.id)}
+                              disabled={reactivateSubItem.isPending}>
+                              Reactivate
+                            </Button>
+                            <Button size="sm" variant="destructive" className="h-6 text-xs"
+                              onClick={() => {
+                                if (window.confirm('Are you sure? This cannot be undone.')) {
+                                  deleteSubItem.mutate(s.id)
+                                }
+                              }}
+                              disabled={deleteSubItem.isPending}>
+                              Delete
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

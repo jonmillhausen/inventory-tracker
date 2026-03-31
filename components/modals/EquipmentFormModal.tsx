@@ -28,7 +28,8 @@ export function EquipmentFormModal({ item, onClose }: Props) {
   const CATEGORY_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
 
   function handleCategoryChange(event: ChangeEvent<HTMLSelectElement>) {
-    setCategories(Array.from(event.target.selectedOptions, option => option.value))
+    const selectedCategory = event.target.value
+    setCategories(selectedCategory ? [selectedCategory] : [])
   }
 
   const create = useCreateEquipment()
@@ -101,20 +102,19 @@ export function EquipmentFormModal({ item, onClose }: Props) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="categories">Categories</Label>
+            <Label htmlFor="category">Category</Label>
             <select
-              id="categories"
-              multiple
-              size={4}
-              value={categories.filter(cat => CATEGORY_OPTIONS.includes(cat as any))}
+              id="category"
+              value={categories[0] ?? ''}
               onChange={handleCategoryChange}
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             >
+              <option value="">None</option>
               {CATEGORY_OPTIONS.map(cat => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-500">Select one or more fixed categories. GameTruck is not editable here.</p>
+            <p className="text-xs text-gray-500">Select a single fixed category.</p>
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <DialogFooter>

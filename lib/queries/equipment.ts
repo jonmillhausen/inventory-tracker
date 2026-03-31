@@ -100,14 +100,83 @@ export function useUpdateEquipment() {
   })
 }
 
-export function useDeactivateEquipment() {
+export function useReactivateEquipment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/equipment/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: EQUIPMENT_KEY }),
+  })
+}
+
+export function useDeleteEquipment() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/equipment/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error(await res.text())
     },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+    },
+  })
+}
+
+export function useDeactivateEquipment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/equipment/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: false }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: EQUIPMENT_KEY }),
+  })
+}
+
+export function useReactivateSubItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (subId: string) => {
+      const res = await fetch(`/api/equipment/sub-items/${subId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: true }),
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+    },
+  })
+}
+
+export function useDeleteSubItem() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (subId: string) => {
+      const res = await fetch(`/api/equipment/sub-items/${subId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error(await res.text())
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SUB_ITEMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_LINKS_KEY })
+    },
   })
 }
 

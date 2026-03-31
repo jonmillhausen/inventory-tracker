@@ -37,9 +37,44 @@ export async function DELETE(
 
   const { id } = await params
   const supabase = await createClient()
+
+  const { data: linkRows, error: linkError } = await supabase
+    .from('equipment_sub_item_links')
+    .select('sub_item_id')
+    .eq('parent_id', id)
+
+  if (linkError) return NextResponse.json({ error: linkError.message }, { status: 500 })
+
+  const subItemIds = Array.from(new Set((linkRows ?? []).map(row => row.sub_item_id)))
+
+  if (subItemIds.length > 0) {
+    const { data: remainingLinks, error: remainingError } = await supabase
+      .from('equipment_sub_item_links')
+      .select('sub_item_id,parent_id')
+      .in('sub_item_id', subItemIds)
+      .neq('parent_id', id)
+
+    if (remainingError) return NextResponse.json({ error: remainingError.message }, { status: 500 })
+
+    const fallbackParentBySubItem = new Map<string, string>()
+    for (const link of remainingLinks ?? []) {
+      if (!fallbackParentBySubItem.has(link.sub_item_id)) {
+        fallbackParentBySubItem.set(link.sub_item_id, link.parent_id)
+      }
+    }
+
+    for (const [subItemId, fallbackParentId] of fallbackParentBySubItem) {
+      const { error: updateParentError } = await supabase
+        .from('equipment_sub_items')
+        .update({ parent_id: fallbackParentId } as any)
+        .eq('id', subItemId)
+      if (updateParentError) return NextResponse.json({ error: updateParentError.message }, { status: 500 })
+    }
+  }
+
   const { error } = await supabase
     .from('equipment')
-    .update({ is_active: false })
+    .delete()
     .eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
