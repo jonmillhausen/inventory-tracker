@@ -72,6 +72,7 @@ interface ChainCardProps {
   isPrinting: boolean
   overrides: Map<string, number>
   notes: Map<string, ChainLoadingNote>
+  chainNoteDraft: string
   savingOverrideKeys: Set<string>
   savingNoteKeys: Set<string>
   onSaveOverride: (subItemId: string, qty: number) => Promise<void>
@@ -90,6 +91,7 @@ function ChainCard({
   isPrinting,
   overrides,
   notes,
+  chainNoteDraft: initialChainNoteDraft,
   savingOverrideKeys,
   savingNoteKeys,
   onSaveOverride,
@@ -111,8 +113,12 @@ function ChainCard({
   const chainNote = notes.get(chainNoteKey)?.note ?? ''
 
   useEffect(() => {
-    setChainNoteDraft(chainNote)
-  }, [chainNote])
+    if (chainNote) {
+      setChainNoteDraft(chainNote)
+    } else {
+      setChainNoteDraft(initialChainNoteDraft)
+    }
+  }, [chainNote, initialChainNoteDraft])
 
   const handleStartEditNote = (key: string) => {
     setEditingNoteKey(key)
@@ -518,6 +524,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
   const [printError, setPrintError] = useState<string | null>(null)
   const [overrides, setOverrides] = useState<Map<string, number>>(new Map())
   const [notes, setNotes] = useState<Map<string, ChainLoadingNote>>(new Map())
+  const [chainNoteDrafts, setChainNoteDrafts] = useState<Map<string, string>>(new Map())
   const [savingOverrideKeys, setSavingOverrideKeys] = useState<Set<string>>(new Set())
   const [savingNoteKeys, setSavingNoteKeys] = useState<Set<string>>(new Set())
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -535,23 +542,30 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
     async function loadOverrides() {
       setLoadError(null)
       try {
+        console.log('[ChainLoading] loadOverrides', { event_date: selectedDate })
         const res = await fetch(`/api/chain-loading/overrides?event_date=${selectedDate}`)
         if (!res.ok) {
           throw new Error(await res.text())
         }
         const data = await res.json() as { overrides: ChainLoadingOverride[]; notes: ChainLoadingNote[] }
+        console.log('[ChainLoading] loadOverrides response', data)
         const overrideMap = new Map<string, number>()
         for (const item of data.overrides ?? []) {
           overrideMap.set(`${item.chain_id}::${item.sub_item_id}`, item.qty_override)
         }
         const noteMap = new Map<string, ChainLoadingNote>()
+        const chainDrafts = new Map<string, string>()
         for (const note of data.notes ?? []) {
           noteMap.set(`${note.chain_id}::${note.item_type}::${note.item_id}`, note)
+          if (note.item_type === 'chain') {
+            chainDrafts.set(note.chain_id, note.note)
+          }
         }
         setOverrides(overrideMap)
         setNotes(noteMap)
-      } catch (err) {
-        setLoadError(err instanceof Error ? err.message : 'Failed to load chain loading overrides')
+        setChainNoteDrafts(chainDrafts)
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : String(error))
       }
     }
 
@@ -560,6 +574,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
 
   const saveOverride = useCallback(async (chainId: string, subItemId: string, qty: number) => {
     const key = `${chainId}::${subItemId}`
+    console.log('[ChainLoading] saveOverride', { chainId, subItemId, qty, event_date: selectedDate })
     setSavingOverrideKeys(prev => new Set(prev).add(key))
     try {
       const res = await fetch('/api/chain-loading/overrides', {
@@ -570,6 +585,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
       if (!res.ok) {
         throw new Error(await res.text())
       }
+      console.log('[ChainLoading] saveOverride response ok', { chainId, subItemId, qty })
       setOverrides(prev => {
         const next = new Map(prev)
         next.set(key, qty)
@@ -586,6 +602,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
 
   const saveNote = useCallback(async (chainId: string, itemId: string, itemType: OverrideNoteType, note: string) => {
     const key = `${chainId}::${itemType}::${itemId}`
+    console.log('[ChainLoading] saveNote', { chainId, itemId, itemType, note, event_date: selectedDate })
     setSavingNoteKeys(prev => new Set(prev).add(key))
     try {
       const res = await fetch('/api/chain-loading/overrides', {
@@ -597,12 +614,20 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
         throw new Error(await res.text())
       }
       const data = await res.json() as { note: ChainLoadingNote }
+      console.log('[ChainLoading] saveNote response', data)
       if (data.note) {
         setNotes(prev => {
           const next = new Map(prev)
           next.set(key, data.note)
           return next
         })
+        if (itemType === 'chain') {
+          setChainNoteDrafts(prev => {
+            const next = new Map(prev)
+            next.set(chainId, note)
+            return next
+          })
+        }
       }
     } finally {
       setSavingNoteKeys(prev => {
@@ -817,6 +842,7 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
               isPrinting={printingChain === chain.id}
               overrides={overrides}
               notes={notes}
+              chainNoteDraft={chainNoteDrafts.get(chain.id) ?? ''}
               savingOverrideKeys={savingOverrideKeys}
               savingNoteKeys={savingNoteKeys}
               onSaveOverride={async (subItemId, qty) => saveOverride(chain.id, subItemId, qty)}
