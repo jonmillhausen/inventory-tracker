@@ -18,9 +18,15 @@ export async function POST(
   }
 
   const supabase = await createClient()
+  const rows = Array.from({ length: quantity }, () => ({
+    sub_item_id: subId,
+    quantity: 1,
+    issue_description,
+    expected_return_date: expected_return_date || null,
+  }))
   const { data, error } = await supabase
     .from('equipment_oos')
-    .insert({ sub_item_id: subId, quantity, issue_description, expected_return_date: expected_return_date || null })
+    .insert(rows)
     .select()
     .single()
 

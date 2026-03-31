@@ -18,11 +18,16 @@ export async function POST(
   }
 
   const supabase = await createClient()
+  const rows = Array.from({ length: quantity }, () => ({
+    equipment_id: id,
+    quantity: 1,
+    issue_description,
+    expected_return_date: expected_return_date || null,
+  }))
   const { data, error } = await supabase
     .from('equipment_oos')
-    .insert({ equipment_id: id, quantity, issue_description, expected_return_date: expected_return_date || null })
+    .insert(rows)
     .select()
-    .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data, { status: 201 })

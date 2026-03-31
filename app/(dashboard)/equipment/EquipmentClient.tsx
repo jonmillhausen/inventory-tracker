@@ -10,7 +10,7 @@ import { ResolveIssueFlagModal } from '@/components/modals/ResolveIssueFlagModal
 import { EquipmentFormModal } from '@/components/modals/EquipmentFormModal'
 import { SubItemFormModal } from '@/components/modals/SubItemFormModal'
 import { canAdmin, canCreateIssueFlag } from '@/lib/auth/roles'
-import { ChevronDown, ChevronRight, Flag, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Flag, Pencil, X, XCircle } from 'lucide-react'
 import type { UserRole, Database } from '@/lib/types/database.types'
 
 const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
@@ -47,6 +47,7 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   const [expandedParents, setExpandedParents] = useState<Set<string>>(new Set())
   const [equipmentFilter, setEquipmentFilter] = useState<'all' | 'damaged' | 'flags'>('all')
   const [categoryFilters, setCategoryFilters] = useState<string[]>([])
+  const [search, setSearch] = useState('')
 
   // Avail. = total_qty - active_oos (no booking deduction)
   const availByEquipmentId = useMemo(() => {
@@ -84,8 +85,12 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
       const selected = new Set(categoryFilters)
       filtered = filtered.filter(e => (e.categories ?? []).some(cat => selected.has(cat)))
     }
+    if (search.trim()) {
+      const searchValue = search.toLowerCase()
+      filtered = filtered.filter(e => e.name.toLowerCase().includes(searchValue))
+    }
     return filtered
-  }, [activeEquipment, equipmentFilter, categoryFilters, oosSums])
+  }, [activeEquipment, equipmentFilter, categoryFilters, oosSums, search])
 
   // Map sub-items by id
   const subItemMap = useMemo(() => new Map(subItems.map(s => [s.id, s])), [subItems])
@@ -142,56 +147,84 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
   return (
     <div className="space-y-4">
       {/* Header with filter buttons */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-xl font-semibold">Equipment</h1>
-          {/* Filter buttons */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(['all', 'damaged', 'flags'] as const).map(f => {
-              const labels = { all: 'All Equipment', damaged: 'Out of Service Only', flags: 'Flags Only' }
-              return (
-                <button
-                  key={f}
-                  onClick={() => setEquipmentFilter(f)}
-                  className={`px-3 py-1 text-sm rounded-md border font-medium transition-colors ${
-                    equipmentFilter === f
+      <div className="space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-semibold">Equipment</h1>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(['all', 'damaged', 'flags'] as const).map(f => {
+                const labels = { all: 'All Equipment', damaged: 'Out of Service', flags: 'Flagged' }
+                const selected = equipmentFilter === f
+                const baseClasses = 'px-3 py-1 text-sm rounded-md border font-medium transition-colors'
+                const colorClasses = f === 'damaged'
+                  ? selected
+                    ? 'bg-red-600 text-white border-red-600'
+                    : 'bg-white dark:bg-gray-800 text-black border-red-600 hover:bg-red-50'
+                  : f === 'flags'
+                    ? selected
+                      ? 'bg-orange-500 text-white border-orange-500'
+                      : 'bg-white dark:bg-gray-800 text-black border-orange-400 hover:bg-orange-50'
+                    : selected
                       ? 'bg-gray-900 text-white border-gray-900'
                       : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-900 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {labels[f]}
-                </button>
-              )
-            })}
-            <span className="text-gray-300">|</span>
-            <span className="text-base font-medium text-gray-600 dark:text-gray-300">Filter:</span>
-            <div className="flex flex-wrap items-center gap-5">
-              {CATEGORY_FILTER_OPTIONS.map(option => (
-                <label key={option} className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
-                  <input
-                    type="checkbox"
-                    checked={categoryFilters.includes(option)}
-                    onChange={() => {
-                      setCategoryFilters(prev =>
-                        prev.includes(option)
-                          ? prev.filter(value => value !== option)
-                          : [...prev, option]
-                      )
-                    }}
-                    className="accent-blue-500"
-                  />
-                  {option}
-                </label>
-              ))}
+                return (
+                  <button
+                    key={f}
+                    onClick={() => setEquipmentFilter(f)}
+                    className={`${baseClasses} ${colorClasses}`}
+                  >
+                    {labels[f]}
+                  </button>
+                )
+              })}
+              <span className="mx-4 text-gray-300">|</span>
+              <span className="text-base font-medium text-gray-600 dark:text-gray-300">Filter:</span>
+              <div className="flex flex-wrap items-center gap-5 ml-3">
+                {CATEGORY_FILTER_OPTIONS.map(option => (
+                  <label key={option} className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={categoryFilters.includes(option)}
+                      onChange={() => {
+                        setCategoryFilters(prev =>
+                          prev.includes(option)
+                            ? prev.filter(value => value !== option)
+                            : [...prev, option]
+                        )
+                      }}
+                      className="accent-blue-500"
+                    />
+                    {option}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
+          {canAdmin(role) && (
+            <div className="flex gap-2">
+              <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={() => setAddingType('primary')}>+ Primary Equipment</Button>
+              <Button size="sm" variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50" onClick={() => setAddingType('sub_item')}>+ Sub-Item</Button>
+            </div>
+          )}
         </div>
-        {canAdmin(role) && (
-          <div className="flex gap-2">
-            <Button size="sm" className="bg-blue-500 hover:bg-blue-600 text-white" onClick={() => setAddingType('primary')}>+ Primary Equipment</Button>
-            <Button size="sm" variant="outline" className="border-blue-500 text-blue-500 hover:bg-blue-50" onClick={() => setAddingType('sub_item')}>+ Sub-Item</Button>
+        <div className="flex items-center gap-2">
+          <div className="relative max-w-xs w-full">
+            <svg
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              placeholder="Search equipment…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full border dark:border-gray-600 rounded px-3 py-1.5 text-sm pl-8 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+            />
           </div>
-        )}
+        </div>
       </div>
 
       <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
@@ -202,7 +235,12 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
               <th className="px-4 py-3 font-medium text-center">Total</th>
               <th className="px-4 py-3 font-medium text-center">Avail.</th>
               <th className="px-4 py-3 font-medium text-center">Loadout</th>
-              <th className="px-4 py-3 font-medium text-center">Out of Service</th>
+              <th className="px-4 py-3 font-medium text-center">
+                <span className="inline-flex items-center gap-1 justify-center">
+                  <XCircle size={14} className="text-red-500" />
+                  Out of Service
+                </span>
+              </th>
               <th className="px-4 py-3 font-medium text-center">
                 <span className="inline-flex items-center gap-1 justify-center">
                   <Flag size={13} className="text-orange-500" />
@@ -279,19 +317,33 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 flex-wrap">
-                        {canCreateIssueFlag(role) && (
-                          <Button size="sm" variant="outline"
-                            onClick={() => setIssueFlagTarget({ id: e.id, name: e.name, type: 'equipment' })}>
-                            Flag
-                          </Button>
-                        )}
                         {canAdmin(role) && (
-                          <>
-                            <Button size="sm" variant="outline"
-                              onClick={() => setEditEquipment(e)}>
-                              Edit
-                            </Button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => setEditEquipment(e)}
+                            className="h-8 w-8 rounded-md border border-black text-black grid place-items-center hover:bg-black hover:text-white transition-colors"
+                            aria-label={`Edit ${e.name}`}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setOosTarget({ id: e.id, name: e.name, type: 'equipment' })}
+                          className="h-8 w-8 rounded-md border border-red-500 text-red-500 grid place-items-center hover:bg-red-500 hover:text-white transition-colors"
+                          aria-label={`Mark ${e.name} out of service`}
+                        >
+                          <X size={14} />
+                        </button>
+                        {canCreateIssueFlag(role) && (
+                          <button
+                            type="button"
+                            onClick={() => setIssueFlagTarget({ id: e.id, name: e.name, type: 'equipment' })}
+                            className="h-8 w-8 rounded-md border border-orange-400 text-orange-600 grid place-items-center hover:bg-orange-400 hover:text-white transition-colors"
+                            aria-label={`Flag ${e.name}`}
+                          >
+                            <Flag size={14} />
+                          </button>
                         )}
                       </div>
                     </td>
@@ -340,25 +392,41 @@ export function EquipmentClient({ initialEquipment, initialSubItems, initialSubI
                           ) : '—'}
                         </td>
                         <td className="px-4 py-2">
-                          <div className="flex gap-1 flex-wrap">
+                          <div className="flex gap-2 flex-wrap">
+                            {canAdmin(role) && (
+                              <button
+                                type="button"
+                                onClick={() => setEditSubItem(sub)}
+                                className="h-8 w-8 rounded-md border border-black text-black grid place-items-center hover:bg-black hover:text-white transition-colors"
+                                aria-label={`Edit ${sub.name}`}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setOosTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}
+                              className="h-8 w-8 rounded-md border border-red-500 text-red-500 grid place-items-center hover:bg-red-500 hover:text-white transition-colors"
+                              aria-label={`Mark ${sub.name} out of service`}
+                            >
+                              <X size={14} />
+                            </button>
                             {canCreateIssueFlag(role) && (
-                              <Button size="sm" variant="outline" className="h-6 text-xs"
-                                onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}>
-                                Flag
-                              </Button>
+                              <button
+                                type="button"
+                                onClick={() => setIssueFlagTarget({ id: sub.id, name: sub.name, type: 'sub_item' })}
+                                className="h-8 w-8 rounded-md border border-orange-400 text-orange-600 grid place-items-center hover:bg-orange-400 hover:text-white transition-colors"
+                                aria-label={`Flag ${sub.name}`}
+                              >
+                                <Flag size={14} />
+                              </button>
                             )}
                             {canAdmin(role) && (
-                              <>
-                                <Button size="sm" variant="outline" className="h-6 text-xs"
-                                  onClick={() => setEditSubItem(sub)}>
-                                  Edit
-                                </Button>
-                                <Button size="sm" variant="outline" className="h-6 text-xs"
-                                  onClick={() => deactivateSubItem.mutate({ parentId: e.id, subId: sub.id })}
-                                  disabled={deactivateSubItem.isPending}>
-                                  Deactivate
-                                </Button>
-                              </>
+                              <Button size="sm" variant="outline" className="h-8 text-xs"
+                                onClick={() => deactivateSubItem.mutate({ parentId: e.id, subId: sub.id })}
+                                disabled={deactivateSubItem.isPending}>
+                                Deactivate
+                              </Button>
                             )}
                           </div>
                         </td>

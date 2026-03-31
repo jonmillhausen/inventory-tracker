@@ -521,3 +521,22 @@ export function useReturnSubItemFromOOS() {
     },
   })
 }
+
+export function useDecrementOOSQuantity() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (oosId: string) => {
+      const res = await fetch(`/api/equipment/oos/${oosId}/remove`, {
+        method: 'PATCH',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      return res.json()
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['equipment_oos'], exact: false })
+      qc.invalidateQueries({ queryKey: ['sub_item_oos'], exact: false })
+      qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_SUMS_KEY })
+      qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_SUMS_KEY })
+    },
+  })
+}

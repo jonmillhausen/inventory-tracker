@@ -6,12 +6,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
+  useEquipment,
   useEquipmentOOS,
+  useEquipmentSubItems,
   useMarkOOS,
   useReturnFromOOS,
+  useSubItemLinks,
   useSubItemOOS,
   useMarkSubItemOOS,
   useReturnSubItemFromOOS,
+  useUpdateEquipment,
+  useUpdateSubItem,
+  useDecrementOOSQuantity,
 } from '@/lib/queries/equipment'
 
 interface Props {
@@ -26,6 +32,13 @@ export function OOSDetailModal({ itemId, itemName, itemType, onClose }: Props) {
   const { data: subItemRecords = [] } = useSubItemOOS(itemType === 'sub_item' ? itemId : '')
   const records = itemType === 'equipment' ? equipmentRecords : subItemRecords
 
+  const { data: equipment = [] } = useEquipment()
+  const { data: subItems = [] } = useEquipmentSubItems()
+  const { data: subItemLinks = [] } = useSubItemLinks()
+  const updateEquipment = useUpdateEquipment()
+  const updateSubItem = useUpdateSubItem()
+  const decrementOOSQuantity = useDecrementOOSQuantity()
+
   const markEquipmentOOS = useMarkOOS()
   const markSubItemOOS = useMarkSubItemOOS()
   const returnEquipmentFromOOS = useReturnFromOOS()
@@ -35,25 +48,35 @@ export function OOSDetailModal({ itemId, itemName, itemType, onClose }: Props) {
   const [issueDescription, setIssueDescription] = useState('')
   const [expectedReturnDate, setExpectedReturnDate] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [removePending, setRemovePending] = useState(false)
+
+  const currentItem = itemType === 'equipment'
+    ? equipment.find(item => item.id === itemId)
+    : subItems.find(item => item.id === itemId)
+
+  const parentLink = itemType === 'sub_item'
+    ? subItemLinks.find(link => link.sub_item_id === itemId)
+    : null
 
   const activeCount = records.reduce((sum, r) => sum + r.quantity, 0)
   const isMarkPending = markEquipmentOOS.isPending || markSubItemOOS.isPending
-  const isReturnPending = returnEquipmentFromOOS.isPending || returnSubItemFromOOS.isPending
+  const isReturnPending = returnEquipmentFromOOS.isPending || returnSubItemFromOOS.isPending || decrementOOSQuantity.isPending || removePending
 
   async function handleMarkOOS(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     try {
       const shared = {
-        quantity,
         issue_description: issueDescription || null,
         expected_return_date: expectedReturnDate || null,
       }
-      if (itemType === 'equipment') {
-        await markEquipmentOOS.mutateAsync({ equipmentId: itemId, ...shared })
-      } else {
-        await markSubItemOOS.mutateAsync({ subItemId: itemId, ...shared })
-      }
+      const tasks = Array.from({ length: quantity }, () => {
+        if (itemType === 'equipment') {
+          return markEquipmentOOS.mutateAsync({ equipmentId: itemId, quantity: 1, ...shared })
+        }
+        return markSubItemOOS.mutateAsync({ subItemId: itemId, quantity: 1, ...shared })
+      })
+      await Promise.all(tasks)
       setQuantity(1)
       setIssueDescription('')
       setExpectedReturnDate('')
@@ -72,6 +95,31 @@ export function OOSDetailModal({ itemId, itemName, itemType, onClose }: Props) {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to return from service')
+    }
+  }
+
+  async function handlePermanentRemove(record: { id: string; quantity: number }) {
+    setError(null)
+    setRemovePending(true)
+    try {
+      if (!currentItem) {
+        throw new Error('Item not found')
+      }
+      const newTotalQty = Math.max(0, currentItem.total_qty - 1)
+      if (itemType === 'equipment') {
+        await updateEquipment.mutateAsync({ id: itemId, total_qty: newTotalQty })
+      } else {
+        const parentId = parentLink?.parent_id
+        if (!parentId) {
+          throw new Error('No parent link found for sub-item')
+        }
+        await updateSubItem.mutateAsync({ parentId, subId: itemId, total_qty: newTotalQty })
+      }
+      await decrementOOSQuantity.mutateAsync(record.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove item permanently')
+    } finally {
+      setRemovePending(false)
     }
   }
 
@@ -145,14 +193,24 @@ export function OOSDetailModal({ itemId, itemName, itemType, onClose }: Props) {
                     </p>
                   )}
                 </div>
-                <Button
-                  size="sm"
-                  className="shrink-0 bg-green-600 hover:bg-green-700 text-white h-7 text-xs"
-                  onClick={() => handleReturn(record.id)}
-                  disabled={isReturnPending}
-                >
-                  ✓ Return to Service
-                </Button>
+                <div className="flex flex-col gap-2 items-end">
+                  <Button
+                    size="sm"
+                    className="shrink-0 bg-green-600 hover:bg-green-700 text-white h-7 text-xs"
+                    onClick={() => handleReturn(record.id)}
+                    disabled={isReturnPending}
+                  >
+                    ✓ Return to Service
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="shrink-0 bg-red-600 hover:bg-red-700 text-white h-7 text-xs"
+                    onClick={() => handlePermanentRemove(record)}
+                    disabled={isReturnPending}
+                  >
+                    Permanently Remove (1)
+                  </Button>
+                </div>
               </div>
             ))
           )}
