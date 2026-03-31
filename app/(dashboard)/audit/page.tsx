@@ -10,7 +10,7 @@ type ChainRow = Database['public']['Tables']['chains']['Row']
 type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 
 export const metadata = {
-  title: 'Event Audit',
+  title: '4-Week Audit',
 }
 
 export default async function AuditPage() {

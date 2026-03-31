@@ -155,12 +155,13 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
         key={cell.date}
         onClick={() => handleCellClick(cell.date)}
         className={`
-          border rounded-lg p-2.5 cursor-pointer transition-colors min-h-[140px]
+          relative border rounded-lg p-2.5 pt-7 cursor-pointer transition-colors min-h-[140px]
           ${isToday ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20 dark:border-blue-600' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50'}
         `}
       >
-        {/* Date label */}
-        <div className="text-base font-bold text-gray-800 dark:text-gray-100 mb-1">{formatDayMonth(cell.date)}</div>
+        <div className="absolute top-0 left-0 bg-black text-white text-xs px-1.5 py-0.5 rounded-br-md">
+          {formatDayMonth(cell.date)}
+        </div>
 
         {cell.eventCount === 0 ? (
           <div className="text-xs text-gray-300 dark:text-gray-600 mt-2">No events</div>
@@ -230,7 +231,7 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold">Event Audit</h1>
+        <h1 className="text-xl font-semibold">4-Week Audit</h1>
         <button
           onClick={() => setAnchorDate(todayStr())}
           className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
