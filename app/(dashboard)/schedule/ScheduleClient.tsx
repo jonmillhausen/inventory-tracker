@@ -379,16 +379,9 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                 <div
                   key={h}
                   className="absolute left-0 right-0 text-right pr-1"
-                  style={{ top: yPos(h * 60) - 6, fontFamily: 'monospace' }}
+                  style={{ top: yPos(h * 60) - 6 }}
                 >
-                  <span
-                    style={{
-                      fontSize: 11,
-                      ...(theme === 'dark'
-                        ? { backgroundColor: 'black', color: 'white', borderRadius: 2, padding: '0 2px' }
-                        : { color: '#94a3b8' }),
-                    }}
-                  >
+                  <span className="text-gray-700 dark:text-gray-400">
                     {formatHour(h)}
                   </span>
                 </div>

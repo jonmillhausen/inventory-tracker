@@ -232,12 +232,6 @@ export function AuditClient({ initialData, initialChains, initialEquipment }: Pr
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-semibold">4-Week Audit</h1>
-        <button
-          onClick={() => setAnchorDate(todayStr())}
-          className="border rounded px-2 py-1 text-sm text-gray-600 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800"
-        >
-          Today
-        </button>
       </div>
 
       {/* Legend */}
