@@ -142,6 +142,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   const [showSetup, setShowSetup] = useState(true)
   const [popupId, setPopupId] = useState<string | null>(null)
   const [travelCalcFrom, setTravelCalcFrom] = useState(BASE_ADDRESS)
+  const [travelCalcDestination, setTravelCalcDestination] = useState('')
   const [travelCalcResult, setTravelCalcResult] = useState<TravelInfo | null>(null)
   const [travelCalcLoading, setTravelCalcLoading] = useState(false)
   const [travelCalcError, setTravelCalcError] = useState<string | null>(null)
@@ -261,25 +262,49 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     const defaultFrom = bookingIndex > 0 ? (col?.bookings[bookingIndex - 1].address ?? BASE_ADDRESS) : BASE_ADDRESS
 
     setTravelCalcFrom(defaultFrom)
+    setTravelCalcDestination(popupBooking?.address ?? '')
     setTravelCalcResult(null)
     setTravelCalcError(null)
   }, [popupBooking, columns])
 
   const calculatePopupTravel = useCallback(async (booking: BookingRow) => {
-    if (!booking.address) return
+    const toAddress = travelCalcDestination || booking.address
+    if (!toAddress) return
 
     setTravelCalcLoading(true)
     setTravelCalcError(null)
 
     try {
-      const result = await fetchTravelInfo(travelCalcFrom, booking.address, selectedDate, booking.start_time ?? '08:00')
+      const result = await fetchTravelInfo(travelCalcFrom, toAddress, selectedDate, booking.start_time ?? '08:00')
       setTravelCalcResult(result)
     } catch {
       setTravelCalcError('Unable to calculate travel time')
     } finally {
       setTravelCalcLoading(false)
     }
-  }, [selectedDate, travelCalcFrom])
+  }, [selectedDate, travelCalcFrom, travelCalcDestination])
+
+  const swapTravelDirection = useCallback(async (booking: BookingRow) => {
+    const currentDestination = travelCalcDestination || booking.address
+    if (!currentDestination || !travelCalcFrom.trim()) return
+
+    const newFrom = currentDestination
+    const newDestination = travelCalcFrom
+    setTravelCalcFrom(newFrom)
+    setTravelCalcDestination(newDestination)
+    setTravelCalcResult(null)
+    setTravelCalcError(null)
+    setTravelCalcLoading(true)
+
+    try {
+      const result = await fetchTravelInfo(newFrom, newDestination, selectedDate, booking.start_time ?? '08:00')
+      setTravelCalcResult(result)
+    } catch {
+      setTravelCalcError('Unable to calculate travel time')
+    } finally {
+      setTravelCalcLoading(false)
+    }
+  }, [selectedDate, travelCalcDestination, travelCalcFrom])
 
   function getTravelInfo(from: string, to: string): TravelInfo {
     return travelTimes.get(`${from}::${to}`) ?? { minutes: FALLBACK_TRAVEL_MIN, hasToll: false }
@@ -616,7 +641,7 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                                     setTravelCalcError(null)
                                   }}
                                   placeholder="From address"
-                                  className="min-w-0"
+                                  className="min-w-0 text-xs"
                                 />
                                 <button
                                   type="button"
@@ -630,10 +655,21 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
                               {!booking.address && (
                                 <div className="text-xs text-red-500">Event address is required to calculate travel time.</div>
                               )}
-                              {travelCalcResult && booking.address && (
-                                <div className="text-xs text-gray-700">
-                                  Estimated travel from <span className="font-semibold">{travelCalcFrom}</span> to <span className="font-semibold">{booking.address}</span>: <span className="font-semibold">{travelCalcResult.minutes}m</span>
-                                  {travelCalcResult.hasToll ? ' · Toll route likely' : ' · Toll-free route available'}
+                              {travelCalcResult && (
+                                <div className="space-y-1">
+                                  <div className="text-sm font-normal text-gray-900">
+                                    Estimated travel time: {travelCalcResult.minutes} minutes{travelCalcResult.hasToll ? ' (tolls)' : ''}
+                                  </div>
+                                  <div className="text-xs text-gray-400">Start: {travelCalcFrom}</div>
+                                  <div className="text-xs text-gray-400">End: {travelCalcDestination || booking.address}</div>
+                                  <button
+                                    type="button"
+                                    onClick={() => swapTravelDirection(booking)}
+                                    disabled={travelCalcLoading || !travelCalcFrom.trim() || !(travelCalcDestination || booking.address).trim()}
+                                    className="inline-flex items-center justify-center rounded border border-blue-500 bg-white px-2 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                                  >
+                                    ⇄ Swap Direction
+                                  </button>
                                 </div>
                               )}
                               {travelCalcError && <div className="text-xs text-red-500">{travelCalcError}</div>}

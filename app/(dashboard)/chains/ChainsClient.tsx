@@ -104,6 +104,7 @@ function ChainCard({
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
   const [chainNoteDraft, setChainNoteDraft] = useState('')
+  const [savedNoteKeys, setSavedNoteKeys] = useState<Set<string>>(new Set())
   const [overrideDrafts, setOverrideDrafts] = useState<Map<string, number>>(new Map())
 
   const chainNoteKey = `${chain.id}::chain::${chain.id}`
@@ -118,10 +119,39 @@ function ChainCard({
     setNoteDraft(notes.get(key)?.note ?? '')
   }
 
-  const handleSaveNote = async (chainId: string, itemId: string, itemType: OverrideNoteType) => {
-    if (editingNoteKey && editingNoteKey !== `${chainId}::${itemType}::${itemId}`) return
-    await onSaveNote(itemId, itemType, noteDraft)
+  const handleSaveNote = async (chainId: string, itemId: string, itemType: OverrideNoteType, noteText?: string) => {
+    const key = `${chainId}::${itemType}::${itemId}`
+    if (editingNoteKey && editingNoteKey !== key) return
+    await onSaveNote(itemId, itemType, noteText ?? noteDraft)
     setEditingNoteKey(null)
+    setSavedNoteKeys(prev => {
+      const next = new Set(prev)
+      next.add(key)
+      return next
+    })
+    window.setTimeout(() => {
+      setSavedNoteKeys(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }, 2000)
+  }
+
+  const handleSaveChainNote = async () => {
+    await handleSaveNote(chain.id, chain.id, 'chain', chainNoteDraft)
+    setSavedNoteKeys(prev => {
+      const next = new Set(prev)
+      next.add(chainNoteKey)
+      return next
+    })
+    window.setTimeout(() => {
+      setSavedNoteKeys(prev => {
+        const next = new Set(prev)
+        next.delete(chainNoteKey)
+        return next
+      })
+    }, 2000)
   }
 
   const handleQuantityDraftChange = (key: string, value: number) => {
@@ -221,19 +251,31 @@ function ChainCard({
                         </div>
                         {editingNoteKey === `${chain.id}::equipment::${item.itemId}` ? (
                           <div className="space-y-1">
-                            <Input
-                              value={noteDraft}
-                              onChange={e => setNoteDraft(e.target.value)}
-                              onBlur={() => handleSaveNote(chain.id, item.itemId, 'equipment')}
-                              onKeyDown={ev => {
-                                if (ev.key === 'Enter') {
-                                  ev.preventDefault()
-                                  handleSaveNote(chain.id, item.itemId, 'equipment')
-                                }
-                              }}
-                              placeholder="Add a note"
-                              className="w-full text-xs"
-                            />
+                            <div className="flex items-center gap-2">
+                              <Input
+                                value={noteDraft}
+                                onChange={e => setNoteDraft(e.target.value)}
+                                onBlur={() => handleSaveNote(chain.id, item.itemId, 'equipment')}
+                                onKeyDown={ev => {
+                                  if (ev.key === 'Enter') {
+                                    ev.preventDefault()
+                                    handleSaveNote(chain.id, item.itemId, 'equipment')
+                                  }
+                                }}
+                                placeholder="Add a note"
+                                className="w-full text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveNote(chain.id, item.itemId, 'equipment')}
+                                className="text-[10px] text-blue-600 hover:underline print:hidden"
+                              >
+                                Save
+                              </button>
+                            </div>
+                            {savedNoteKeys.has(`${chain.id}::equipment::${item.itemId}`) && (
+                              <div className="text-[10px] text-green-600">Saved ✓</div>
+                            )}
                           </div>
                         ) : notes.has(`${chain.id}::equipment::${item.itemId}`) ? (
                           <div className="text-[10px] italic text-gray-500">
@@ -262,6 +304,7 @@ function ChainCard({
                                 const isEditingNote = editingNoteKey === noteKey
                                 const hasNote = notes.has(noteKey)
                                 const isSaving = savingOverrideKeys.has(overrideKey)
+                                const isNoteSaving = savingNoteKeys.has(noteKey)
 
                                 return (
                                   <div key={sub.itemId} className="flex flex-col gap-1 py-0.5 border-b border-gray-100 last:border-0">
@@ -293,7 +336,7 @@ function ChainCard({
                                               handleQuantitySave(sub.itemId, overrideQty)
                                             }
                                           }}
-                                          className="text-xs w-12 h-6 py-0 print:hidden"
+                                          className="text-xs w-14 h-6 py-0 print:hidden"
                                         />
                                         <span className="hidden print:inline font-mono text-[10px] ml-1">×{overrideQty}</span>
                                         <button
@@ -307,19 +350,31 @@ function ChainCard({
                                     </div>
                                     {isEditingNote ? (
                                       <div className="space-y-1">
-                                        <Input
-                                          value={noteDraft}
-                                          onChange={e => setNoteDraft(e.target.value)}
-                                          onBlur={() => handleSaveNote(chain.id, sub.itemId, 'sub_item')}
-                                          onKeyDown={ev => {
-                                            if (ev.key === 'Enter') {
-                                              ev.preventDefault()
-                                              handleSaveNote(chain.id, sub.itemId, 'sub_item')
-                                            }
-                                          }}
-                                          placeholder="Add a note"
-                                          className="w-full text-xs"
-                                        />
+                                        <div className="flex items-center gap-2">
+                                          <Input
+                                            value={noteDraft}
+                                            onChange={e => setNoteDraft(e.target.value)}
+                                            onBlur={() => handleSaveNote(chain.id, sub.itemId, 'sub_item')}
+                                            onKeyDown={ev => {
+                                              if (ev.key === 'Enter') {
+                                                ev.preventDefault()
+                                                handleSaveNote(chain.id, sub.itemId, 'sub_item')
+                                              }
+                                            }}
+                                            placeholder="Add a note"
+                                            className="w-full text-xs"
+                                          />
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSaveNote(chain.id, sub.itemId, 'sub_item')}
+                                            className="text-[10px] text-blue-600 hover:underline print:hidden"
+                                          >
+                                            Save
+                                          </button>
+                                        </div>
+                                        {savedNoteKeys.has(noteKey) && (
+                                          <div className="text-[10px] text-green-600">Saved ✓</div>
+                                        )}
                                       </div>
                                     ) : hasNote ? (
                                       <div className="text-[10px] italic text-gray-500">
@@ -347,16 +402,28 @@ function ChainCard({
             <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
               Additional details
             </label>
-            <textarea
-              rows={2}
-              value={chainNoteDraft}
-              onChange={e => setChainNoteDraft(e.target.value)}
-              onBlur={async () => {
-                await onSaveNote(chain.id, 'chain', chainNoteDraft)
-              }}
-              placeholder="Additional details/instructions..."
-              className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs leading-5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 print:hidden"
-            />
+            <div className="space-y-2">
+              <textarea
+                rows={2}
+                value={chainNoteDraft}
+                onChange={e => setChainNoteDraft(e.target.value)}
+                onBlur={handleSaveChainNote}
+                placeholder="Additional details/instructions..."
+                className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs leading-5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 print:hidden"
+              />
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveChainNote}
+                  className="text-[10px] text-blue-600 hover:underline print:hidden"
+                >
+                  Save
+                </button>
+                {savedNoteKeys.has(chainNoteKey) && (
+                  <span className="text-[10px] text-green-600 print:hidden">Saved ✓</span>
+                )}
+              </div>
+            </div>
             {chainNote && (
               <p className="mt-2 text-[10px] italic text-gray-500 print:text-gray-900">
                 {chainNote}
