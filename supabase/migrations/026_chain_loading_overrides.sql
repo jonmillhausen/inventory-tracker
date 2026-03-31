@@ -16,7 +16,7 @@ CREATE TABLE chain_loading_notes (
   chain_id text NOT NULL REFERENCES chains(id) ON DELETE CASCADE,
   event_date date NOT NULL,
   item_id text NOT NULL,
-  item_type text NOT NULL CHECK (item_type IN ('equipment', 'sub_item')),
+  item_type text NOT NULL CHECK (item_type IN ('equipment', 'sub_item', 'chain')),
   note text NOT NULL,
   created_by uuid REFERENCES users(id),
   updated_at timestamptz NOT NULL DEFAULT now(),

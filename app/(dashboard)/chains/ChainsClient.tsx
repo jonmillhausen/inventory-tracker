@@ -21,7 +21,7 @@ type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
 type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 type BookingRow = Database['public']['Tables']['bookings']['Row']
 
-type OverrideNoteType = 'equipment' | 'sub_item'
+type OverrideNoteType = 'equipment' | 'sub_item' | 'chain'
 
 interface ChainLoadingOverride {
   chain_id: string
@@ -103,7 +103,15 @@ function ChainCard({
 
   const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
+  const [chainNoteDraft, setChainNoteDraft] = useState('')
   const [overrideDrafts, setOverrideDrafts] = useState<Map<string, number>>(new Map())
+
+  const chainNoteKey = `${chain.id}::chain::${chain.id}`
+  const chainNote = notes.get(chainNoteKey)?.note ?? ''
+
+  useEffect(() => {
+    setChainNoteDraft(chainNote)
+  }, [chainNote])
 
   const handleStartEditNote = (key: string) => {
     setEditingNoteKey(key)
@@ -111,7 +119,7 @@ function ChainCard({
   }
 
   const handleSaveNote = async (chainId: string, itemId: string, itemType: OverrideNoteType) => {
-    if (editingNoteKey !== `${chainId}::${itemType}::${itemId}`) return
+    if (editingNoteKey && editingNoteKey !== `${chainId}::${itemType}::${itemId}`) return
     await onSaveNote(itemId, itemType, noteDraft)
     setEditingNoteKey(null)
   }
@@ -285,8 +293,9 @@ function ChainCard({
                                               handleQuantitySave(sub.itemId, overrideQty)
                                             }
                                           }}
-                                          className="w-20 text-[10px]"
+                                          className="text-xs w-12 h-6 py-0 print:hidden"
                                         />
+                                        <span className="hidden print:inline font-mono text-[10px] ml-1">×{overrideQty}</span>
                                         <button
                                           type="button"
                                           onClick={() => handleStartEditNote(noteKey)}
@@ -333,6 +342,27 @@ function ChainCard({
               </div>
             </div>
           )}
+
+          <div className="mb-4">
+            <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1 block">
+              Additional details
+            </label>
+            <textarea
+              rows={2}
+              value={chainNoteDraft}
+              onChange={e => setChainNoteDraft(e.target.value)}
+              onBlur={async () => {
+                await onSaveNote(chain.id, 'chain', chainNoteDraft)
+              }}
+              placeholder="Additional details/instructions..."
+              className="w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs leading-5 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 print:hidden"
+            />
+            {chainNote && (
+              <p className="mt-2 text-[10px] italic text-gray-500 print:text-gray-900">
+                {chainNote}
+              </p>
+            )}
+          </div>
 
           {/* Events section */}
           <div>

@@ -78,6 +78,18 @@ export function isBookingActiveOnDate(
     }
   }
 
+  // Coordinated overnight events that end in the early morning should only
+  // count on the start day, not the next day.
+  if (
+    booking.event_type === 'coordinated' &&
+    booking.end_date &&
+    booking.end_date > booking.event_date &&
+    booking.end_time &&
+    booking.end_time <= '04:00:00'
+  ) {
+    return booking.event_date === date
+  }
+
   const end = booking.end_date ?? booking.event_date
   return booking.event_date <= date && date <= end
 }

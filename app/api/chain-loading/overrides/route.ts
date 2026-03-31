@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSessionAndRole } from '@/lib/api/auth'
 import { createClient } from '@/lib/supabase/server'
 
-const NOTE_TYPES = ['equipment', 'sub_item'] as const
+const NOTE_TYPES = ['equipment', 'sub_item', 'chain'] as const
 
 type OverrideNoteType = typeof NOTE_TYPES[number]
 
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'item_id is required for note' }, { status: 400 })
     }
     if (!item_type || typeof item_type !== 'string' || !NOTE_TYPES.includes(item_type as any)) {
-      return NextResponse.json({ error: 'item_type must be equipment or sub_item' }, { status: 400 })
+      return NextResponse.json({ error: 'item_type must be equipment, sub_item, or chain' }, { status: 400 })
     }
 
     const notesTable = (supabase as any).from('chain_loading_notes')
