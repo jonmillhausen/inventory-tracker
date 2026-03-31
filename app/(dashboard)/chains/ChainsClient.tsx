@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
 import { useBookings } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
@@ -20,6 +20,23 @@ type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
 type SubItemLinkRow = Database['public']['Tables']['equipment_sub_item_links']['Row']
 type BookingRow = Database['public']['Tables']['bookings']['Row']
+
+type OverrideNoteType = 'equipment' | 'sub_item'
+
+interface ChainLoadingOverride {
+  chain_id: string
+  event_date: string
+  sub_item_id: string
+  qty_override: number
+}
+
+interface ChainLoadingNote {
+  chain_id: string
+  event_date: string
+  item_id: string
+  item_type: OverrideNoteType
+  note: string
+}
 
 interface Props {
   initialChains: ChainRow[]
@@ -53,6 +70,12 @@ interface ChainCardProps {
   onToggleSub: (key: string) => void
   onPrint: () => void
   isPrinting: boolean
+  overrides: Map<string, number>
+  notes: Map<string, ChainLoadingNote>
+  savingOverrideKeys: Set<string>
+  savingNoteKeys: Set<string>
+  onSaveOverride: (subItemId: string, qty: number) => Promise<void>
+  onSaveNote: (itemId: string, itemType: OverrideNoteType, note: string) => Promise<void>
 }
 
 function ChainCard({
@@ -65,11 +88,44 @@ function ChainCard({
   onToggleSub,
   onPrint,
   isPrinting,
+  overrides,
+  notes,
+  savingOverrideKeys,
+  savingNoteKeys,
+  onSaveOverride,
+  onSaveNote,
 }: ChainCardProps) {
   const parentItems = packingList.filter(r => !r.isSubItem)
 
   function getSubItems(parentId: string): PackingListRow[] {
     return packingList.filter(r => r.isSubItem && r.parentItemId === parentId)
+  }
+
+  const [editingNoteKey, setEditingNoteKey] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [overrideDrafts, setOverrideDrafts] = useState<Map<string, number>>(new Map())
+
+  const handleStartEditNote = (key: string) => {
+    setEditingNoteKey(key)
+    setNoteDraft(notes.get(key)?.note ?? '')
+  }
+
+  const handleSaveNote = async (chainId: string, itemId: string, itemType: OverrideNoteType) => {
+    if (editingNoteKey !== `${chainId}::${itemType}::${itemId}`) return
+    await onSaveNote(itemId, itemType, noteDraft)
+    setEditingNoteKey(null)
+  }
+
+  const handleQuantityDraftChange = (key: string, value: number) => {
+    setOverrideDrafts(prev => {
+      const next = new Map(prev)
+      next.set(key, value)
+      return next
+    })
+  }
+
+  const handleQuantitySave = async (subItemId: string, value: number) => {
+    await onSaveOverride(subItemId, value)
   }
 
   return (
@@ -128,22 +184,54 @@ function ChainCard({
                   return (
                     <div key={item.itemId}>
                       {/* Parent item row */}
-                      <div className="flex items-center justify-between py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
-                        <label className="flex items-center gap-1.5 cursor-pointer flex-1">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => onToggleCheck(`${chain.id}::${item.itemId}`)}
-                            className="accent-green-600 rounded"
-                          />
-                          <span
-                            className="text-xs font-semibold"
-                            style={{ opacity: isChecked ? 0.4 : 1, textDecoration: isChecked ? 'line-through' : 'none' }}
-                          >
-                            {item.name}
-                          </span>
-                        </label>
-                        <span className="font-mono text-xs font-bold ml-2">×{item.qty}</span>
+                      <div className="flex flex-col gap-1 py-1 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                        <div className="flex items-start justify-between gap-3">
+                          <label className="flex items-center gap-1.5 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => onToggleCheck(`${chain.id}::${item.itemId}`)}
+                              className="accent-green-600 rounded"
+                            />
+                            <span
+                              className="text-xs font-semibold"
+                              style={{ opacity: isChecked ? 0.4 : 1, textDecoration: isChecked ? 'line-through' : 'none' }}
+                            >
+                              {item.name}
+                            </span>
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleStartEditNote(`${chain.id}::equipment::${item.itemId}`)}
+                              className="text-[10px] text-blue-600 hover:underline print:hidden"
+                            >
+                              {notes.has(`${chain.id}::equipment::${item.itemId}`) ? 'Edit' : '+Note'}
+                            </button>
+                            <span className="font-mono text-xs font-bold ml-2">×{item.qty}</span>
+                          </div>
+                        </div>
+                        {editingNoteKey === `${chain.id}::equipment::${item.itemId}` ? (
+                          <div className="space-y-1">
+                            <Input
+                              value={noteDraft}
+                              onChange={e => setNoteDraft(e.target.value)}
+                              onBlur={() => handleSaveNote(chain.id, item.itemId, 'equipment')}
+                              onKeyDown={ev => {
+                                if (ev.key === 'Enter') {
+                                  ev.preventDefault()
+                                  handleSaveNote(chain.id, item.itemId, 'equipment')
+                                }
+                              }}
+                              placeholder="Add a note"
+                              className="w-full text-xs"
+                            />
+                          </div>
+                        ) : notes.has(`${chain.id}::equipment::${item.itemId}`) ? (
+                          <div className="text-[10px] italic text-gray-500">
+                            {notes.get(`${chain.id}::equipment::${item.itemId}`)?.note}
+                          </div>
+                        ) : null}
                       </div>
 
                       {/* Sub-items collapsible */}
@@ -160,23 +248,78 @@ function ChainCard({
                             <div className="space-y-0">
                               {subs.map(sub => {
                                 const subChecked = checkedItems.has(`${chain.id}::${sub.itemId}`)
+                                const overrideKey = `${chain.id}::${sub.itemId}`
+                                const overrideQty = overrideDrafts.get(overrideKey) ?? overrides.get(overrideKey) ?? sub.qty
+                                const noteKey = `${chain.id}::sub_item::${sub.itemId}`
+                                const isEditingNote = editingNoteKey === noteKey
+                                const hasNote = notes.has(noteKey)
+                                const isSaving = savingOverrideKeys.has(overrideKey)
+
                                 return (
-                                  <div key={sub.itemId} className="flex items-center justify-between py-0.5 border-b border-gray-100 last:border-0">
-                                    <label className="flex items-center gap-1.5 cursor-pointer flex-1">
-                                      <input
-                                        type="checkbox"
-                                        checked={subChecked}
-                                        onChange={() => onToggleCheck(`${chain.id}::${sub.itemId}`)}
-                                        className="accent-green-600 w-3 h-3"
-                                      />
-                                      <span
-                                        className="text-[10px]"
-                                        style={{ opacity: subChecked ? 0.4 : 1 }}
-                                      >
-                                        {sub.name}
-                                      </span>
-                                    </label>
-                                    <span className="font-mono text-[10px] ml-2">×{sub.qty}</span>
+                                  <div key={sub.itemId} className="flex flex-col gap-1 py-0.5 border-b border-gray-100 last:border-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <label className="flex items-center gap-1.5 cursor-pointer flex-1">
+                                        <input
+                                          type="checkbox"
+                                          checked={subChecked}
+                                          onChange={() => onToggleCheck(`${chain.id}::${sub.itemId}`)}
+                                          className="accent-green-600 w-3 h-3"
+                                        />
+                                        <span
+                                          className="text-[10px]"
+                                          style={{ opacity: subChecked ? 0.4 : 1 }}
+                                        >
+                                          {sub.name}
+                                        </span>
+                                      </label>
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          type="number"
+                                          min={0}
+                                          value={overrideQty}
+                                          onChange={e => handleQuantityDraftChange(overrideKey, Number(e.target.value))}
+                                          onBlur={() => handleQuantitySave(sub.itemId, overrideQty)}
+                                          onKeyDown={ev => {
+                                            if (ev.key === 'Enter') {
+                                              ev.preventDefault()
+                                              handleQuantitySave(sub.itemId, overrideQty)
+                                            }
+                                          }}
+                                          className="w-20 text-[10px]"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => handleStartEditNote(noteKey)}
+                                          className="text-[10px] text-blue-600 hover:underline print:hidden"
+                                        >
+                                          {hasNote ? 'Edit' : '+Note'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                    {isEditingNote ? (
+                                      <div className="space-y-1">
+                                        <Input
+                                          value={noteDraft}
+                                          onChange={e => setNoteDraft(e.target.value)}
+                                          onBlur={() => handleSaveNote(chain.id, sub.itemId, 'sub_item')}
+                                          onKeyDown={ev => {
+                                            if (ev.key === 'Enter') {
+                                              ev.preventDefault()
+                                              handleSaveNote(chain.id, sub.itemId, 'sub_item')
+                                            }
+                                          }}
+                                          placeholder="Add a note"
+                                          className="w-full text-xs"
+                                        />
+                                      </div>
+                                    ) : hasNote ? (
+                                      <div className="text-[10px] italic text-gray-500">
+                                        {notes.get(noteKey)?.note}
+                                      </div>
+                                    ) : null}
+                                    {isSaving && (
+                                      <div className="text-[10px] text-gray-500">Saving…</div>
+                                    )}
                                   </div>
                                 )
                               })}
@@ -276,6 +419,11 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set())
   const [printingChain, setPrintingChain] = useState<string | null>(null)
   const [printError, setPrintError] = useState<string | null>(null)
+  const [overrides, setOverrides] = useState<Map<string, number>>(new Map())
+  const [notes, setNotes] = useState<Map<string, ChainLoadingNote>>(new Map())
+  const [savingOverrideKeys, setSavingOverrideKeys] = useState<Set<string>>(new Set())
+  const [savingNoteKeys, setSavingNoteKeys] = useState<Set<string>>(new Set())
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const bookings = data?.bookings ?? []
   const bookingItems = data?.bookingItems ?? []
@@ -285,6 +433,88 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
     () => selectedChain === 'all' ? chains : chains.filter(c => c.id === selectedChain),
     [chains, selectedChain],
   )
+
+  useEffect(() => {
+    async function loadOverrides() {
+      setLoadError(null)
+      try {
+        const res = await fetch(`/api/chain-loading/overrides?event_date=${selectedDate}`)
+        if (!res.ok) {
+          throw new Error(await res.text())
+        }
+        const data = await res.json() as { overrides: ChainLoadingOverride[]; notes: ChainLoadingNote[] }
+        const overrideMap = new Map<string, number>()
+        for (const item of data.overrides ?? []) {
+          overrideMap.set(`${item.chain_id}::${item.sub_item_id}`, item.qty_override)
+        }
+        const noteMap = new Map<string, ChainLoadingNote>()
+        for (const note of data.notes ?? []) {
+          noteMap.set(`${note.chain_id}::${note.item_type}::${note.item_id}`, note)
+        }
+        setOverrides(overrideMap)
+        setNotes(noteMap)
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : 'Failed to load chain loading overrides')
+      }
+    }
+
+    loadOverrides()
+  }, [selectedDate])
+
+  const saveOverride = useCallback(async (chainId: string, subItemId: string, qty: number) => {
+    const key = `${chainId}::${subItemId}`
+    setSavingOverrideKeys(prev => new Set(prev).add(key))
+    try {
+      const res = await fetch('/api/chain-loading/overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chain_id: chainId, event_date: selectedDate, sub_item_id: subItemId, qty_override: qty }),
+      })
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+      setOverrides(prev => {
+        const next = new Map(prev)
+        next.set(key, qty)
+        return next
+      })
+    } finally {
+      setSavingOverrideKeys(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [selectedDate])
+
+  const saveNote = useCallback(async (chainId: string, itemId: string, itemType: OverrideNoteType, note: string) => {
+    const key = `${chainId}::${itemType}::${itemId}`
+    setSavingNoteKeys(prev => new Set(prev).add(key))
+    try {
+      const res = await fetch('/api/chain-loading/overrides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chain_id: chainId, event_date: selectedDate, item_id: itemId, item_type: itemType, note }),
+      })
+      if (!res.ok) {
+        throw new Error(await res.text())
+      }
+      const data = await res.json() as { note: ChainLoadingNote }
+      if (data.note) {
+        setNotes(prev => {
+          const next = new Map(prev)
+          next.set(key, data.note)
+          return next
+        })
+      }
+    } finally {
+      setSavingNoteKeys(prev => {
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [selectedDate])
 
   // Per-chain data
   const chainData = useMemo(() => {
@@ -428,6 +658,11 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
           {printError}
         </div>
       )}
+      {loadError && (
+        <div className="rounded bg-yellow-50 px-3 py-2 text-sm text-yellow-700 border border-yellow-200">
+          {loadError}
+        </div>
+      )}
 
       {/* Chain tab selector */}
       <div className="flex gap-1.5 flex-wrap">
@@ -483,6 +718,12 @@ export function ChainsClient({ initialChains, initialData, initialEquipment, ini
               onToggleSub={toggleSub}
               onPrint={() => handlePrint(chain.id)}
               isPrinting={printingChain === chain.id}
+              overrides={overrides}
+              notes={notes}
+              savingOverrideKeys={savingOverrideKeys}
+              savingNoteKeys={savingNoteKeys}
+              onSaveOverride={async (subItemId, qty) => saveOverride(chain.id, subItemId, qty)}
+              onSaveNote={async (itemId, itemType, note) => saveNote(chain.id, itemId, itemType, note)}
             />
           )
         })}

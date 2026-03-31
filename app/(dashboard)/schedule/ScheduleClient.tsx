@@ -161,9 +161,10 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
     return m
   }, [equipment])
 
-  // Active, non-canceled bookings for selected date
+  // Active bookings for the selected event date only.
+  // Multi-day bookings still use end_date only for rendering height/duration.
   const activeBookings = useMemo(
-    () => bookings.filter(b => isBookingActiveOnDate(b, selectedDate)),
+    () => bookings.filter(b => b.event_date === selectedDate),
     [bookings, selectedDate],
   )
 
