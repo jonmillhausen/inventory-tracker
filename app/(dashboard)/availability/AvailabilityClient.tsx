@@ -21,6 +21,10 @@ type EquipmentRow = Database['public']['Tables']['equipment']['Row']
 type SubItemRow = Database['public']['Tables']['equipment_sub_items']['Row']
 type ChainRow = Database['public']['Tables']['chains']['Row']
 
+const CATEGORY_FILTER_OPTIONS = ['Primary', 'Specialty', 'Lawn Games', 'Add-Ons'] as const
+
+type CategoryFilter = typeof CATEGORY_FILTER_OPTIONS[number]
+
 interface Props {
   initialEquipment: EquipmentRow[]
   initialSubItems: SubItemRow[]
@@ -191,6 +195,7 @@ export function AvailabilityClient({
   const [selectedDate, setSelectedDate] = usePersistedDate('date:availability')
   const [search, setSearch] = useState('')
   const [bookedOnly, setBookedOnly] = useState(false)
+  const [selectedCategories, setSelectedCategories] = useState<CategoryFilter[]>([])
   const [openChainPop, setOpenChainPop] = useState<string | null>(null)
   const [selectedOosEquipmentId, setSelectedOosEquipmentId] = useState<string | null>(null)
 
@@ -232,12 +237,24 @@ export function AvailabilityClient({
     [equipment]
   )
 
+  const equipmentById = useMemo(
+    () => new Map(equipment.map(e => [e.id, e])),
+    [equipment]
+  )
+
   const filteredRows = useMemo(
-    () => rows.filter(r =>
-      r.name.toLowerCase().includes(search.toLowerCase()) &&
-      (!bookedOnly || r.total_booked > 0)
-    ),
-    [rows, search, bookedOnly]
+    () => rows.filter(r => {
+      const categories = equipmentById.get(r.id)?.categories ?? []
+      const matchesCategory =
+        selectedCategories.length === 0 ||
+        categories.some(cat => selectedCategories.includes(cat as CategoryFilter))
+      return (
+        r.name.toLowerCase().includes(search.toLowerCase()) &&
+        (!bookedOnly || r.total_booked > 0) &&
+        matchesCategory
+      )
+    }),
+    [rows, search, bookedOnly, selectedCategories, equipmentById]
   )
 
   // Chain columns: named chains first (alphabetically), Will Call last
@@ -299,7 +316,7 @@ export function AvailabilityClient({
       </div>
 
       {/* Search + filter */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative max-w-xs">
           <svg
             className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none"
@@ -326,6 +343,27 @@ export function AvailabilityClient({
         >
           {bookedOnly ? 'Show All Equipment' : 'Show Booked Only'}
         </button>
+        <span className="mx-3 text-base font-medium text-gray-600 dark:text-gray-300">|</span>
+        <span className="text-base font-medium text-gray-600 dark:text-gray-300">Filter:</span>
+        <div className="flex flex-wrap items-center gap-5">
+          {CATEGORY_FILTER_OPTIONS.map(option => (
+            <label key={option} className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200">
+              <input
+                type="checkbox"
+                checked={selectedCategories.includes(option)}
+                onChange={() => {
+                  setSelectedCategories(prev =>
+                    prev.includes(option)
+                      ? prev.filter(value => value !== option)
+                      : [...prev, option]
+                  )
+                }}
+                className="accent-blue-500"
+              />
+              {option}
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
