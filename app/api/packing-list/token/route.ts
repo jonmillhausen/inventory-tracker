@@ -23,7 +23,8 @@ export async function POST(request: Request) {
   const effectiveEndDate = end_date || date
 
   // HMAC signs chain + event_date + end_date per spec
-  const token = createHmac('sha256', process.env.PACKING_LIST_SECRET || '')
+  const secret = process.env.PACKING_LIST_HMAC_SECRET ?? process.env.PACKING_LIST_SECRET ?? ''
+  const token = createHmac('sha256', secret)
     .update(`${chain}:${date}:${effectiveEndDate}`)
     .digest('hex')
 

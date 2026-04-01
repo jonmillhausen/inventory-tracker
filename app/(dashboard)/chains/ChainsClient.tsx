@@ -145,6 +145,7 @@ function ChainCard({
   }
 
   const handleSaveChainNote = async () => {
+    console.log('[ChainLoading] handleSaveChainNote', { chainId: chain.id, chainNoteDraft })
     await handleSaveNote(chain.id, chain.id, 'chain', chainNoteDraft)
     setSavedNoteKeys(prev => {
       const next = new Set(prev)

@@ -51,6 +51,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: noteError.message }, { status: 500 })
   }
 
+  console.log('[chain-loading/overrides] GET', { event_date, chain_id, overrides: overrides?.length, notes: notes?.length })
   return NextResponse.json({ overrides: overrides ?? [], notes: notes ?? [] })
 }
 
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'item_type must be equipment, sub_item, or chain' }, { status: 400 })
     }
 
+    console.log('[chain-loading/overrides] POST note', { chain_id, event_date, item_id, item_type, note })
     const notesTable = (supabase as any).from('chain_loading_notes')
     const { data, error } = await notesTable
       .upsert(

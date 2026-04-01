@@ -35,7 +35,8 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const end_date = searchParams.get('end_date') || date
 
-  const expected = createHmac('sha256', process.env.PACKING_LIST_SECRET || '')
+  const secret = process.env.PACKING_LIST_HMAC_SECRET ?? process.env.PACKING_LIST_SECRET ?? ''
+  const expected = createHmac('sha256', secret)
     .update(`${chain}:${date}:${end_date}`)
     .digest('hex')
 
@@ -90,6 +91,7 @@ export async function GET(
 
   const chains = chainsRaw as ChainRow | null
   const chainName = chains?.name ?? chain
+  const chainColor = chains?.color ?? '#000'
   const chainMappings = (chainMappingsRaw ?? []) as ChainMappingRow[]
 
   const overrideMap = new Map<string, number>()
@@ -138,9 +140,10 @@ export async function GET(
     .map(mapping => mapping.zenbooker_staff_name)
     .filter(Boolean) as string[]
 
-  const eventHeaders = chainBookings.map((booking, index) =>
-    staffHeaders[index] ?? `${fmt12(booking.start_time)} - ${fmt12(booking.end_time)}`
-  )
+  const eventHeaders = chainBookings.map((booking, index) => ({
+    label: staffHeaders[index] ? `${fmt12(booking.start_time)} - ${fmt12(booking.end_time)}` : `${fmt12(booking.start_time)} - ${fmt12(booking.end_time)}`,
+    subLabel: formatEventType(booking.event_type),
+  }))
 
   const bookingQtyByBooking = new Map<string, Map<string, number>>()
   for (const item of bookingItems as BookingItemRow[]) {
@@ -162,28 +165,34 @@ export async function GET(
   const eventQtyForSubItem = (bookingId: string, subItemId: string, parentItemId: string | null) => {
     if (!parentItemId) return 0
     const parentQty = eventQtyForParent(bookingId, parentItemId)
+    if (parentQty <= 0) return 0
     const parentName = (equipment as EquipmentRow[]).find(e => e.id === parentItemId)?.name ?? ''
     const link = subItemLinksBySub.get(subItemId)
     if (!link) return 0
-    return getEffectiveParentQty(parentName, parentQty) * link.loadout_qty
+    const baseQty = getEffectiveParentQty(parentName, parentQty) * link.loadout_qty
+    return overrideMap.has(subItemId) ? overrideMap.get(subItemId) ?? baseQty : baseQty
   }
+
+  const formatQtyCell = (qty: number) => (qty > 0 ? String(qty) : '')
 
   const equipmentTableRows = parentItems
     .map(parent => {
       const parentNote = noteMap.get(`equipment::${parent.itemId}`)
       const parentRow = `<tr>
+        <td class="checkbox-cell">☐</td>
         <td><strong>${escapeHtml(parent.name)}</strong>${parentNote ? `<div class="note">${escapeHtml(parentNote)}</div>` : ''}</td>
         <td>${parent.qty}</td>
-        ${chainBookings.map(booking => `<td>${escapeHtml(String(eventQtyForParent(booking.id, parent.itemId) || ''))}</td>`).join('')}
+        ${chainBookings.map(booking => `<td>${escapeHtml(formatQtyCell(eventQtyForParent(booking.id, parent.itemId)))}</td>`).join('')}
       </tr>`
       const childRows = (subItemsByParent.get(parent.itemId) ?? [])
         .map(child => {
           const overrideQty = overrideMap.get(child.itemId) ?? child.qty
           const childNote = noteMap.get(`sub_item::${child.itemId}`)
           return `<tr>
-            <td style="padding-left: 24px">${escapeHtml(child.name)}${childNote ? `<div class="note">${escapeHtml(childNote)}</div>` : ''}</td>
+            <td class="checkbox-cell">☐</td>
+            <td style="padding-left: 24px"><em>${escapeHtml(child.name)}</em>${childNote ? `<div class="note">${escapeHtml(childNote)}</div>` : ''}</td>
             <td>${overrideQty}</td>
-            ${chainBookings.map(booking => `<td>${escapeHtml(String(eventQtyForSubItem(booking.id, child.itemId, child.parentItemId) || ''))}</td>`).join('')}
+            ${chainBookings.map(booking => `<td>${escapeHtml(formatQtyCell(eventQtyForSubItem(booking.id, child.itemId, child.parentItemId)))}</td>`).join('')}
           </tr>`
         })
         .join('')
@@ -198,17 +207,19 @@ export async function GET(
   <title>${escapeHtml(chainName)} Packing List — ${escapeHtml(date)}</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; color: #000; }
-    .header-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; }
-    .header-left { font-size: 24px; font-weight: bold; }
+    .header-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; padding: 16px; background: ${escapeHtml(chainColor)}; color: #000; }
+    .header-left { font-size: 28px; font-weight: bold; }
     .header-right { font-size: 14px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 16px; margin-bottom: 24px; font-size: 12px; }
+    .section-label { font-size: 12px; font-weight: bold; margin-top: 20px; margin-bottom: 8px; letter-spacing: 0.05em; }
+    .additional-details { white-space: pre-wrap; font-size: 12px; line-height: 1.4; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11px; }
     th, td { border: 1px solid #000; padding: 8px; vertical-align: top; }
-    th { background: #f0f0f0; }
-    .note { margin-top: 4px; font-size: 11px; color: #333; }
-    .section-label { font-size: 12px; font-weight: bold; margin-top: 24px; margin-bottom: 8px; }
-    .additional-details { white-space: pre-wrap; font-size: 12px; line-height: 1.4; }
+    th { background: #f0f0f0; font-weight: bold; }
+    .checkbox-cell { width: 24px; text-align: center; }
+    .note { margin-top: 4px; font-size: 11px; color: #000; font-style: italic; }
+    .event-subheader { font-size: 10px; color: #333; margin-top: 3px; }
     .signature-label { margin-top: 32px; font-size: 12px; }
-    .signature-line { display: block; margin-top: 24px; width: 320px; border-top: 1px solid #000; padding-top: 8px; }
+    .signature-line { display: block; margin-top: 28px; width: 320px; border-top: 1px solid #000; padding-top: 8px; }
     @media print { body { padding: 10px; } }
   </style>
 </head>
@@ -218,12 +229,11 @@ export async function GET(
     <div class="header-right">${escapeHtml(formattedDate)}</div>
   </div>
 
+  ${chainNote ? `<div class="section-label">Additional Details</div><div class="additional-details">${escapeHtml(chainNote)}</div>` : ''}
   <div class="section-label">Equipment</div>
-  ${parentItems.length > 0 ? `<table><thead><tr><th>Item</th><th>Total</th>${chainBookings.map(() => '<th>Event</th>').join('')}</tr></thead><tbody>${equipmentTableRows}</tbody></table>` : '<p>No equipment items available for this date.</p>'}
+  ${parentItems.length > 0 ? `<table><thead><tr><th class="checkbox-cell"></th><th>Item</th><th>Total</th>${eventHeaders.map(header => `<th><div>${escapeHtml(header.label)}</div><div class="event-subheader">${escapeHtml(header.subLabel)}</div></th>`).join('')}</tr></thead><tbody>${equipmentTableRows}</tbody></table>` : '<p>No equipment items available for this date.</p>'}
 
-  ${chainNote ? `<div class="section-label">Notes</div><div class="additional-details">${escapeHtml(chainNote)}</div>` : ''}
-
-  <div class="signature-label">I confirm all equipment and supplies above have been loaded with the correct quantities and are in working condition:</div>
+  <div class="signature-label">I confirm all equipment and supplies above have been loaded up with the correct quantities and are in working condition:</div>
   <span class="signature-line">Driver Signature</span>
 </body>
 </html>`
@@ -249,6 +259,14 @@ function getEffectiveParentQty(itemName: string, qty: number): number {
   if (tier1.has(slug)) return Math.max(1, Math.floor(qty / 10))
   if (tier2.has(slug)) return Math.max(1, Math.floor(qty / 20))
   return qty
+}
+
+function formatEventType(eventType: string): string {
+  if (!eventType) return ''
+  if (eventType === 'dropoff') return 'Dropoff'
+  if (eventType === 'coordinated') return 'Coordinated'
+  if (eventType === 'pickup') return 'Pickup'
+  return eventType.charAt(0).toUpperCase() + eventType.slice(1)
 }
 
 function escapeHtml(value: string): string {
