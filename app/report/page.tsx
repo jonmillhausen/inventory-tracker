@@ -195,7 +195,7 @@ export default function ReportPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-8 px-4">
       <div className="w-full max-w-lg space-y-6 p-8 bg-white rounded-lg shadow">
-        <img src="/wonderfly-logo.png" alt="Wonderfly" className="mx-auto" style={{ height: 30 }} />
+        <img src="/wonderfly-logo-icon.png" alt="Wonderfly" className="h-12 w-auto mx-auto" />
         <h1 className="text-xl font-bold text-center text-gray-900">
           Equipment Damage / Missing Report
         </h1>
