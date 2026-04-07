@@ -2,7 +2,8 @@
 
 import { useState, useMemo } from 'react'
 import { Input } from '@/components/ui/input'
-import { Search } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Search, ExternalLink } from 'lucide-react'
 import type { Database } from '@/lib/types/database.types'
 
 type ReportRow = Database['public']['Tables']['equipment_reports']['Row']
@@ -55,6 +56,16 @@ export function ReportsClient({ initialReports, equipmentMap, subItemMap }: Repo
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold dark:text-gray-100">Damaged / Missing Reports</h1>
+        <a
+          href="https://inventory-tracker-drab-xi.vercel.app/report"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <Button variant="outline" className="gap-2">
+            <ExternalLink size={16} />
+            Open Form
+          </Button>
+        </a>
       </div>
 
       <div className="relative w-72">

@@ -13,7 +13,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle,
+  Flag,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAdmin } from '@/lib/auth/roles'
@@ -86,8 +86,8 @@ export function Sidebar({ role }: SidebarProps) {
                   : 'text-gray-400 hover:bg-gray-700 hover:text-white'
               )}
             >
-              <AlertTriangle size={14} className="shrink-0" />
-              <span className="truncate">Damaged/Missing</span>
+              <Flag size={14} className="shrink-0" />
+              <span className="truncate">Equipment Flags</span>
             </Link>
           )}
         </div>

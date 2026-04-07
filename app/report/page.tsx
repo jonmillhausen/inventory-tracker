@@ -177,7 +177,7 @@ export default function ReportPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="w-full max-w-md text-center space-y-6 p-8 bg-white rounded-lg shadow">
-          <img src="/wonderfly-logo.png" alt="Wonderfly" className="mx-auto" style={{ height: 30 }} />
+          <img src="/wonderfly-logo-icon.png" alt="Wonderfly" className="h-12 w-auto mx-auto" />
           <div className="flex items-center justify-center w-16 h-16 mx-auto rounded-full bg-green-100">
             <Check className="w-8 h-8 text-green-600" />
           </div>
