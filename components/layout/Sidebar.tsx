@@ -13,6 +13,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAdmin } from '@/lib/auth/roles'
@@ -65,15 +66,31 @@ export function Sidebar({ role }: SidebarProps) {
 
       {/* Nav items */}
       {NAV_ITEMS.map(({ label, href, icon: Icon }) => (
-        <Link
-          key={href}
-          href={href}
-          className={linkClass(href)}
-          title={collapsed ? label : undefined}
-        >
-          <Icon size={18} className="shrink-0" />
-          {!collapsed && <span className="truncate">{label}</span>}
-        </Link>
+        <div key={href}>
+          <Link
+            href={href}
+            className={linkClass(href)}
+            title={collapsed ? label : undefined}
+          >
+            <Icon size={18} className="shrink-0" />
+            {!collapsed && <span className="truncate">{label}</span>}
+          </Link>
+          {/* Sub-nav for Equipment */}
+          {href === '/equipment' && !collapsed && pathname.startsWith('/equipment') && (
+            <Link
+              href="/equipment/reports"
+              className={cn(
+                'flex items-center gap-2 rounded-md text-xs font-medium transition-colors py-1.5 pl-8 pr-3',
+                pathname.startsWith('/equipment/reports')
+                  ? 'bg-gray-700 text-white'
+                  : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+              )}
+            >
+              <AlertTriangle size={14} className="shrink-0" />
+              <span className="truncate">Damaged/Missing</span>
+            </Link>
+          )}
+        </div>
       ))}
 
       {/* Settings (admin only) */}

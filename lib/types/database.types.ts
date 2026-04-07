@@ -5,6 +5,7 @@ export type BookingSource = 'webhook' | 'manual'
 export type ItemType = 'equipment' | 'sub_item'
 export type ResolvedAction = 'cleared' | 'moved_to_oos'
 export type WebhookResult = 'success' | 'error' | 'unmapped_service' | 'skipped'
+export type ReportType = 'damaged' | 'missing'
 
 export interface Database {
   public: {
@@ -305,6 +306,32 @@ export interface Database {
         }>
         Relationships: []
       }
+      equipment_reports: {
+        Row: {
+          id: string
+          submitted_at: string
+          staff_name: string
+          equipment_id: string
+          sub_item_id: string | null
+          report_type: ReportType
+          quantity: number
+          note: string | null
+          flag_created: boolean
+        }
+        Insert: {
+          staff_name: string
+          equipment_id: string
+          sub_item_id?: string | null
+          report_type: ReportType
+          quantity?: number
+          note?: string | null
+          flag_created?: boolean
+        }
+        Update: Partial<{
+          flag_created: boolean
+        }>
+        Relationships: []
+      }
       webhook_logs: {
         Row: {
           id: string
@@ -343,6 +370,7 @@ export interface Database {
       item_type: ItemType
       resolved_action: ResolvedAction
       webhook_result: WebhookResult
+      report_type: ReportType
     }
   }
 }
