@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,14 +43,17 @@ export default function ReportPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient()
-      const [eqRes, subRes] = await Promise.all([
-        supabase.from('equipment').select('id, name, is_active').eq('is_active', true).order('name'),
-        supabase.from('equipment_sub_items').select('id, parent_id, name, is_active').eq('is_active', true).order('name'),
-      ])
-      setEquipment(eqRes.data ?? [])
-      setSubItems(subRes.data ?? [])
-      setLoading(false)
+      try {
+        const res = await fetch('/api/reports/equipment')
+        if (!res.ok) throw new Error('Failed to load equipment')
+        const data = await res.json()
+        setEquipment(data.equipment ?? [])
+        setSubItems(data.subItems ?? [])
+      } catch {
+        setError('Failed to load equipment. Please refresh the page.')
+      } finally {
+        setLoading(false)
+      }
     }
     load()
   }, [])
