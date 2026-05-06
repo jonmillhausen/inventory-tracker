@@ -241,6 +241,8 @@ export function resolveWebhookItems(
 
   for (const svc of services) {
     const hasServiceFields = (svc.service_fields?.length ?? 0) > 0
+    const hasServiceSelections = (svc.service_selections ?? [])
+      .some(sel => (sel.selected_options?.length ?? 0) > 0)
 
     const selections = hasServiceFields
       ? (svc.service_fields ?? []).map(field => ({
@@ -253,7 +255,10 @@ export function resolveWebhookItems(
         }))
       : (svc.service_selections ?? [])
 
-    const pricingSummarySelections = !hasServiceFields && (svc.pricing_summary?.length ?? 0) > 0
+    // pricing_summary is a v1 fallback. It is authoritative ONLY when neither
+    // service_fields nor service_selections carries options — otherwise the same
+    // items appear in both places and the two paths double-count.
+    const pricingSummarySelections = !hasServiceFields && !hasServiceSelections && (svc.pricing_summary?.length ?? 0) > 0
       ? [{
           selected_options: (svc.pricing_summary ?? [])
             .filter(ps => ps.type === 'service_option' && ps.description)
@@ -296,10 +301,16 @@ export function resolveWebhookItems(
     )
 
     if (allOptions.length === 0) {
-      // No options — push ALL base mapped items, or fall back to name match
+      // No options — push ALL base mapped items, or fall back to name match.
+      // Dedupe by item_id: duplicate base rows (e.g. two BASE rows mapping to the
+      // same equipment with slightly different service_name spellings) must not
+      // produce two booking_items entries.
       if (baseMappings.length > 0) {
+        const seen = new Set<string>()
         for (const bm of baseMappings) {
           if (bm.is_skip || !bm.item_id) continue
+          if (seen.has(bm.item_id)) continue
+          seen.add(bm.item_id)
           resolvedItems.push({
             item_id: bm.item_id,
             qty: bm.default_qty,
@@ -331,9 +342,19 @@ export function resolveWebhookItems(
       )
 
       if (modifierMappings.length > 0) {
-        for (const mm of modifierMappings) {
+        // Dedupe by item_id within a single option: when two rows for the same
+        // (service_id, modifier_id) point to the same equipment item (an
+        // accidental duplicate), only push once. Prefer the row with
+        // use_customer_qty=true so the customer-chosen qty is honored.
+        const seen = new Set<string>()
+        const ordered = [...modifierMappings].sort((a, b) =>
+          Number(b.use_customer_qty ?? false) - Number(a.use_customer_qty ?? false)
+        )
+        for (const mm of ordered) {
           if (mm.is_skip) continue
           if (!mm.item_id) continue
+          if (seen.has(mm.item_id)) continue
+          seen.add(mm.item_id)
           const qty = mm.use_customer_qty
             ? (option.quantity ?? mm.default_qty)
             : mm.default_qty
@@ -358,9 +379,12 @@ export function resolveWebhookItems(
             normText.includes(normalizeForMatch(m.zenbooker_modifier_name))
         )
         if (nameMatchMappings.length > 0) {
+          const seen = new Set<string>()
           for (const mm of nameMatchMappings) {
             if (mm.is_skip) continue
             if (!mm.item_id) continue
+            if (seen.has(mm.item_id)) continue
+            seen.add(mm.item_id)
             // Use the parsed quantity from the description prefix when available.
             const qty = (option.quantity !== undefined && option.quantity > 0)
               ? option.quantity
@@ -383,8 +407,11 @@ export function resolveWebhookItems(
       //    modifier mapping fires).
       if (!baseMappingPushed && baseMappings.length > 0) {
         const customerQtyOption = allOptions.find(o => (o.quantity ?? 0) > 0)
+        const seen = new Set<string>()
         for (const bm of baseMappings) {
           if (bm.is_skip || !bm.item_id) continue
+          if (seen.has(bm.item_id)) continue
+          seen.add(bm.item_id)
           const qty = bm.use_customer_qty && customerQtyOption
             ? (customerQtyOption.quantity ?? bm.default_qty)
             : bm.default_qty

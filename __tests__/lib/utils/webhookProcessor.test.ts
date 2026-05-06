@@ -252,6 +252,61 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toHaveLength(0)
   })
 
+  it('dedupes duplicate modifier rows mapping to the same item_id', () => {
+    // Real-world bug: service_mappings has two rows for the same (service_id, modifier_id)
+    // both mapping to the same item_id. Without dedupe, the option would push twice.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Lawn Games',
+      ...withOptions([{ id: 'mod_jenga', text: 'Deluxe Jenga', quantity: 1 }]),
+    }
+    const sm1 = makeServiceMapping({ id: 'a', zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'mod_jenga', item_id: 'mega_jenga', use_customer_qty: true })
+    const sm2 = makeServiceMapping({ id: 'b', zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'mod_jenga', item_id: 'mega_jenga', use_customer_qty: false })
+    const result = resolveWebhookItems([svc], [], [sm1, sm2], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0]).toEqual({ item_id: 'mega_jenga', qty: 1, is_sub_item: false, parent_item_id: null })
+  })
+
+  it('dedupes duplicate base mapping rows for the same item_id', () => {
+    // Real-world bug: service_mappings has two BASE rows (modifier_id null) mapping to
+    // the same item_id (different service_name spellings). Without dedupe, both fire.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'unmapped_opt', text: 'Custom Quote', price: 0 }]),
+    }
+    const baseA = makeServiceMapping({ id: 'a', zenbooker_modifier_id: null, item_id: 'foam_machine', zenbooker_service_name: 'Foam Party - Staff Coordinated' })
+    const baseB = makeServiceMapping({ id: 'b', zenbooker_modifier_id: null, item_id: 'foam_machine', zenbooker_service_name: 'Foam Party Staff Coordinated' })
+    const result = resolveWebhookItems([svc], [], [baseA, baseB], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].item_id).toBe('foam_machine')
+    expect(result.resolvedItems[0].qty).toBe(1)
+  })
+
+  it('dedupes duplicate base mappings on a no-options service', () => {
+    const svc: ZenbookerService = { service_id: 'svc1', service_name: 'Foam Party' }
+    const baseA = makeServiceMapping({ id: 'a', zenbooker_modifier_id: null, item_id: 'foam_machine' })
+    const baseB = makeServiceMapping({ id: 'b', zenbooker_modifier_id: null, item_id: 'foam_machine' })
+    const result = resolveWebhookItems([svc], [], [baseA, baseB], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].qty).toBe(1)
+  })
+
+  it('skips pricing_summary path when service_selections has options (v3 double-count guard)', () => {
+    // Defense-in-depth: a v3 payload with both service_selections AND pricing_summary
+    // should treat service_selections as authoritative — pricing_summary must not also fire.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Lawn Games',
+      service_selections: [{ selected_options: [{ id: 'mod_jenga', text: 'Deluxe Jenga', quantity: 1 }] }],
+      pricing_summary: [{ type: 'service_option', description: 'Deluxe Jenga', amount: 110 }],
+    }
+    const sm1 = makeServiceMapping({ zenbooker_service_id: 'svc1', zenbooker_modifier_id: 'mod_jenga', zenbooker_modifier_name: 'Deluxe Jenga', item_id: 'mega_jenga' })
+    const result = resolveWebhookItems([svc], [], [sm1], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0].item_id).toBe('mega_jenga')
+  })
+
   it('modifier match + skip in same service: items from modifier, skip consumes its option', () => {
     // Dartboard with a paid add-on (cornhole → item) and a skip (generator → nothing)
     const svc: ZenbookerService = {
