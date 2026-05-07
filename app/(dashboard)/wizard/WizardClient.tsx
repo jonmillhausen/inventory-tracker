@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { useWizardAvailability, type WizardQueryParams } from '@/lib/queries/wizard'
 import type { WizardDay, WizardSlot } from '@/lib/utils/wizardSlots'
 import type { WizardAvailabilityResponse } from '@/app/api/wizard/availability/route'
+import { WizardDayDetailModal } from '@/components/modals/WizardDayDetailModal'
 
 type EquipmentOption = {
   id: string
@@ -290,8 +291,7 @@ export function WizardClient({ equipment }: { equipment: EquipmentOption[] }) {
           onDayClick={setSelectedDay}
         />
       )}
-      {/* WizardDayDetailModal is added in Task 6 */}
-      {selectedDay ? null : null}
+      <WizardDayDetailModal day={selectedDay} onClose={() => setSelectedDay(null)} />
     </div>
   )
 }
