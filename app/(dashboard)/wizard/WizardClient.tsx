@@ -96,15 +96,16 @@ function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth,
               type="button"
               disabled={past}
               onClick={() => !past && onDayClick(cell)}
-              className={`bg-white min-h-[88px] text-left p-1 ${past ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+              className={`relative bg-white min-h-[88px] text-left p-1 ${past ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
             >
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-sm bg-black text-white text-xs font-medium">
+              <span className="absolute top-2 left-2 inline-flex items-center justify-center w-6 h-6 rounded-sm bg-black text-white text-xs font-medium">
                 {dayNum}
               </span>
+              <div className="pt-8">
               {isLoading ? (
-                <div className="mt-1 h-3 w-12 bg-gray-200 animate-pulse rounded" />
+                <div className="h-3 w-12 bg-gray-200 animate-pulse rounded" />
               ) : unavailable ? (
-                <div className="mt-1 text-[10px] text-red-600 font-medium">Unavailable</div>
+                <div className="text-[10px] text-red-600 font-medium">Unavailable</div>
               ) : (
                 (() => {
                   const allSlots = cell.chains.flatMap(c => c.slots)
@@ -142,6 +143,7 @@ function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth,
                   )
                 })()
               )}
+              </div>
             </button>
           )
         })}
