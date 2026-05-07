@@ -83,6 +83,50 @@ export function minToTime(min: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
+/**
+ * Format an HH:MM (24h) string into 12-hour display form.
+ * "16:00" → "4:00 PM"; "00:30" → "12:30 AM".
+ */
+export function formatTime12(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
+
+/**
+ * Collapse a list of HH:MM slot start times (any order, possibly duplicated)
+ * into an array of contiguous ranges based on `incrementMin` spacing.
+ *
+ * A range's `start`/`end` are both START times (event start times, not
+ * occupied-window endpoints). A run of one slot returns `{start: t, end: t}`.
+ *
+ * Example: ['10:30','11:00','11:30','13:00'] with increment 30 →
+ *   [{start:'10:30', end:'11:30'}, {start:'13:00', end:'13:00'}]
+ */
+export function computeAvailabilityRanges(
+  starts: string[],
+  incrementMin: number = SLOT_INCREMENT_MIN,
+): Array<{ start: string; end: string }> {
+  const unique = Array.from(new Set(starts)).sort()
+  if (unique.length === 0) return []
+  const ranges: Array<{ start: string; end: string }> = []
+  let runStart = unique[0]
+  let runLast = unique[0]
+  for (let i = 1; i < unique.length; i++) {
+    const cur = unique[i]
+    if (timeToMin(cur) - timeToMin(runLast) === incrementMin) {
+      runLast = cur
+    } else {
+      ranges.push({ start: runStart, end: runLast })
+      runStart = cur
+      runLast = cur
+    }
+  }
+  ranges.push({ start: runStart, end: runLast })
+  return ranges
+}
+
 export function resolveBufferMin(value: number | null | undefined): number {
   if (value === null || value === undefined || value === 0) return DEFAULT_BUFFER_MIN
   return value

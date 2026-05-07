@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useWizardAvailability, type WizardQueryParams } from '@/lib/queries/wizard'
-import type { WizardDay, WizardSlot } from '@/lib/utils/wizardSlots'
+import { formatTime12, computeAvailabilityRanges, type WizardDay, type WizardSlot, type WizardChainDay } from '@/lib/utils/wizardSlots'
 import type { WizardAvailabilityResponse } from '@/app/api/wizard/availability/route'
 import { WizardDayDetailModal } from '@/components/modals/WizardDayDetailModal'
 
@@ -29,13 +29,6 @@ type EquipmentOption = {
 // ─── MonthCalendar helpers ────────────────────────────────────────────────────
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-function formatTime12(hhmm: string): string {
-  const [h, m] = hhmm.split(':').map(Number)
-  const period = h >= 12 ? 'PM' : 'AM'
-  const h12 = h % 12 === 0 ? 12 : h % 12
-  return `${h12}:${String(m).padStart(2, '0')} ${period}`
-}
 
 function isPastDate(year: number, month: number, day: number, today: Date): boolean {
   const cellDate = new Date(year, month - 1, day)
@@ -94,15 +87,6 @@ function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth,
 
           const dayNum = parseInt(cell.date.slice(8, 10), 10)
           const past = isPastDate(year, month, dayNum, today)
-          const totalSlots = cell.chains.reduce((sum, c) => sum + c.slots.length, 0)
-          const allSlots: WizardSlot[] = cell.chains.flatMap(c => c.slots)
-          const top3 = [...allSlots]
-            .sort((a, b) => {
-              if (a.starred !== b.starred) return a.starred ? -1 : 1
-              if (a.score !== b.score) return b.score - a.score
-              return a.start.localeCompare(b.start)
-            })
-            .slice(0, 3)
 
           const unavailable = !past && cell.available_inventory <= 0
 
@@ -120,19 +104,41 @@ function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth,
               ) : unavailable ? (
                 <div className="mt-1 text-[10px] text-red-600 font-medium">Unavailable</div>
               ) : (
-                <>
-                  <div className="mt-1 space-y-0.5">
-                    {top3.map((s, j) => (
-                      <div key={j} className="text-[10px] truncate flex items-center gap-0.5">
-                        {s.starred && <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500 shrink-0" />}
-                        <span>{formatTime12(s.start)} – {formatTime12(s.end)}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {totalSlots > 3 && (
-                    <div className="text-[10px] text-blue-600 mt-0.5">+ {totalSlots - 3} more</div>
-                  )}
-                </>
+                (() => {
+                  const allSlots = cell.chains.flatMap(c => c.slots)
+                  const starredByStart = new Map<string, WizardSlot>()
+                  for (const s of allSlots) {
+                    if (s.starred && !starredByStart.has(s.start)) starredByStart.set(s.start, s)
+                  }
+                  const starredChips = Array.from(starredByStart.values())
+                    .sort((a, b) => a.start.localeCompare(b.start))
+                  const nonStarredStarts = allSlots.filter(s => !s.starred).map(s => s.start)
+                  const ranges = computeAvailabilityRanges(nonStarredStarts)
+
+                  return (
+                    <>
+                      {starredChips.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {starredChips.map((s, j) => (
+                            <div key={`star-${j}`} className="text-[10px] truncate flex items-center gap-0.5">
+                              <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500 shrink-0" />
+                              <span>{formatTime12(s.start)} – {formatTime12(s.end)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {ranges.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {ranges.map((r, j) => (
+                            <div key={`range-${j}`} className="text-[10px] truncate text-gray-600">
+                              {formatTime12(r.start)} – {formatTime12(r.end)}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )
+                })()
               )}
             </button>
           )
@@ -267,7 +273,7 @@ export function WizardClient({ equipment }: { equipment: EquipmentOption[] }) {
             <SelectContent>
               <SelectItem value="">— None —</SelectItem>
               {START_TIMES.map(t => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
+                <SelectItem key={t} value={t}>{formatTime12(t)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

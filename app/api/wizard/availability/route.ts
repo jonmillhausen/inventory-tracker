@@ -117,12 +117,17 @@ export async function GET(request: Request) {
     item_id: bi.item_id,
     qty: bi.qty,
   }))
-  const chains: WizardChain[] = (chainsRes.data ?? []) as WizardChain[]
+  const chains: WizardChain[] = ((chainsRes.data ?? []) as WizardChain[])
+    .filter(c => c.name.trim().toLowerCase() !== 'arena pickup')
   const oosRecords: WizardOosRecord[] = (oosRes.data ?? []) as WizardOosRecord[]
 
   const totalDays = daysInMonth(year, month)
   const days: WizardDay[] = []
 
+  // duration_minutes here represents the EVENT TIME ONLY. computeDay adds
+  // setupMin + TRAVEL_BUFFER_MIN before and cleanupMin + TRAVEL_BUFFER_MIN
+  // after to derive the occupied window for conflict and inventory checks.
+  // The UI displays event start/end only — never the full occupied window.
   for (let d = 1; d <= totalDays; d++) {
     const date = toIsoDate(year, month, d)
     const activeOosCount = oosRecords

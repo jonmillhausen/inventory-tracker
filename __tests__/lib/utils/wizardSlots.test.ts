@@ -4,6 +4,8 @@ import {
   timeToMin,
   minToTime,
   isOosActiveOn,
+  formatTime12,
+  computeAvailabilityRanges,
   type WizardBooking,
   type WizardBookingItem,
   type WizardChain,
@@ -292,6 +294,45 @@ const makeOos = (o: Partial<WizardOosRecord> = {}): WizardOosRecord => ({
   expected_return_date: null,
   returned_at: null,
   ...o,
+})
+
+describe('formatTime12', () => {
+  it('formats midnight and noon correctly', () => {
+    expect(formatTime12('00:00')).toBe('12:00 AM')
+    expect(formatTime12('12:00')).toBe('12:00 PM')
+  })
+  it('formats AM and PM hours', () => {
+    expect(formatTime12('07:30')).toBe('7:30 AM')
+    expect(formatTime12('16:00')).toBe('4:00 PM')
+    expect(formatTime12('23:30')).toBe('11:30 PM')
+  })
+})
+
+describe('computeAvailabilityRanges', () => {
+  it('returns empty array for empty input', () => {
+    expect(computeAvailabilityRanges([])).toEqual([])
+  })
+  it('collapses one contiguous run', () => {
+    expect(computeAvailabilityRanges(['09:00', '09:30', '10:00'])).toEqual([
+      { start: '09:00', end: '10:00' },
+    ])
+  })
+  it('splits on a 60-min gap', () => {
+    expect(computeAvailabilityRanges(['09:00', '09:30', '11:00'])).toEqual([
+      { start: '09:00', end: '09:30' },
+      { start: '11:00', end: '11:00' },
+    ])
+  })
+  it('dedupes duplicate times', () => {
+    expect(computeAvailabilityRanges(['10:00', '10:00', '10:30'])).toEqual([
+      { start: '10:00', end: '10:30' },
+    ])
+  })
+  it('handles unsorted input', () => {
+    expect(computeAvailabilityRanges(['11:00', '09:00', '10:30', '10:00', '09:30'])).toEqual([
+      { start: '09:00', end: '11:00' },
+    ])
+  })
 })
 
 describe('isOosActiveOn', () => {
