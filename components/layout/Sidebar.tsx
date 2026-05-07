@@ -23,11 +23,11 @@ import type { UserRole } from '@/lib/types/database.types'
 const NAV_ITEMS = [
   { label: 'Availability',  href: '/availability', icon: CalendarDays },
   { label: 'Schedule',      href: '/schedule',      icon: Clock        },
+  { label: 'Chain Wizard',  href: '/wizard',        icon: WandSparkles },
   { label: '4-Week Audit',  href: '/audit',         icon: Search       },
   { label: 'Chain Loading', href: '/chains',        icon: Truck        },
   { label: 'Equipment',     href: '/equipment',     icon: Package      },
   { label: 'Bookings',      href: '/bookings',      icon: CheckSquare  },
-  { label: 'Chain Wizard', href: '/wizard',        icon: WandSparkles },
 ] as const
 
 interface SidebarProps {
