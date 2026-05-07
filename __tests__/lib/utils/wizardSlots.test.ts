@@ -66,6 +66,11 @@ describe('timeToMin / minToTime', () => {
     expect(minToTime(510)).toBe('08:30')
     expect(minToTime(840)).toBe('14:00')
   })
+
+  it('wraps hours at 24', () => {
+    expect(minToTime(24 * 60)).toBe('00:00')
+    expect(minToTime(25 * 60 + 30)).toBe('01:30')
+  })
 })
 
 describe('resolveBufferMin', () => {
@@ -113,6 +118,13 @@ describe('computeDay — empty day', () => {
     const result = computeDay(baseInput({ requestedQty: 20 }))
     // available_inventory = 10, but every slot needs 20 → all rejected
     expect(result.chains[0].slots).toHaveLength(0)
+  })
+
+  it('returns no slots when requested qty is zero or negative', () => {
+    const zero = computeDay(baseInput({ requestedQty: 0 }))
+    expect(zero.chains).toEqual([])
+    const neg = computeDay(baseInput({ requestedQty: -3 }))
+    expect(neg.chains).toEqual([])
   })
 })
 
@@ -186,13 +198,13 @@ describe('computeDay — scoring', () => {
     // Existing event window: 07:15 to 10:45 → next slot starts within 30min → B
     // Same item booked → C
     // But preferredStart is 12:00, candidate at 11:00 doesn't match A
-    const slot = result.chains[0].slots.find(s => s.start === '11:00')
-    if (slot) {
-      // A is false, so even score >= 2 should not star
-      if (slot.score >= 2 && !slot.criteria.a) {
-        expect(slot.starred).toBe(false)
-      }
-    }
+    const slot = result.chains[0].slots.find(s => s.start === '12:30')
+    expect(slot).toBeDefined()
+    expect(slot!.criteria.a).toBe(false)
+    expect(slot!.criteria.b).toBe(true)
+    expect(slot!.criteria.c).toBe(true)
+    expect(slot!.score).toBe(2)
+    expect(slot!.starred).toBe(false)
   })
 
   it('Criterion B: tight scheduling within 30 min of an existing event', () => {

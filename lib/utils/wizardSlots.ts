@@ -78,7 +78,7 @@ export function timeToMin(hhmm: string): number {
 }
 
 export function minToTime(min: number): string {
-  const h = Math.floor(min / 60)
+  const h = Math.floor(min / 60) % 24
   const m = min % 60
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
@@ -135,7 +135,7 @@ export function computeDay(input: ComputeDayInput): WizardDay {
   } = input
 
   const availableInventory = totalQty - activeOosCount
-  if (availableInventory <= 0) {
+  if (availableInventory <= 0 || requestedQty <= 0) {
     return { date, available_inventory: availableInventory, chains: [] }
   }
 
@@ -206,13 +206,13 @@ export function computeDay(input: ComputeDayInput): WizardDay {
       const a = preferredStartMin !== null ? s === preferredStartMin : false
 
       // Criterion B: tight scheduling — within 30 min of existing event window edge on this chain
-      let b = false
+      let criterionB = false
       for (const bk of chainBookings) {
         const w = blockingWindows.get(bk.id)
         if (!w) continue
         const startsRightAfter = candidateWindow.start - w.end >= 0 && candidateWindow.start - w.end <= 30
         const endsRightBefore = w.start - candidateWindow.end >= 0 && w.start - candidateWindow.end <= 30
-        if (startsRightAfter || endsRightBefore) { b = true; break }
+        if (startsRightAfter || endsRightBefore) { criterionB = true; break }
       }
 
       // Criterion C: chain already has a booking with the same item today
@@ -224,7 +224,7 @@ export function computeDay(input: ComputeDayInput): WizardDay {
       // Score: count true criteria. A is only counted if preferredStartMin was provided.
       let score = 0
       if (preferredStartMin !== null && a) score += 1
-      if (b) score += 1
+      if (criterionB) score += 1
       if (c) score += 1
 
       // Starred: score >= 2 AND (if preferred start given, A passed)
@@ -235,7 +235,7 @@ export function computeDay(input: ComputeDayInput): WizardDay {
         start: minToTime(s),
         end: minToTime(s + durationMin),
         score: score as 0 | 1 | 2 | 3,
-        criteria: { a, b, c },
+        criteria: { a, b: criterionB, c },
         starred,
         available_qty: availableInventory - globalBooked - requestedQty,
       })
