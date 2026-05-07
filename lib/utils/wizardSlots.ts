@@ -88,6 +88,27 @@ export function resolveBufferMin(value: number | null | undefined): number {
   return value
 }
 
+export type WizardOosRecord = {
+  quantity: number
+  created_at: string                     // ISO timestamp
+  expected_return_date: string | null    // ISO date
+  returned_at: string | null             // ISO timestamp
+}
+
+/**
+ * An OOS record is active on `date` (YYYY-MM-DD) iff it was created on or before
+ * `date` and has not been returned, and the expected return date is strictly
+ * after `date`. Boundaries are exclusive on the return side: a return scheduled
+ * for `date` itself means the equipment is back that day → not OOS.
+ */
+export function isOosActiveOn(oos: WizardOosRecord, date: string): boolean {
+  const created = oos.created_at.slice(0, 10)
+  if (created > date) return false
+  if (oos.returned_at && oos.returned_at.slice(0, 10) <= date) return false
+  if (oos.expected_return_date && oos.expected_return_date <= date) return false
+  return true
+}
+
 type Window = { start: number; end: number } // minutes from midnight
 
 function bookingActiveOnDate(b: WizardBooking, date: string): boolean {

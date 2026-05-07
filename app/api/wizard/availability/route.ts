@@ -4,11 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import {
   computeDay,
   resolveBufferMin,
+  isOosActiveOn,
   DEFAULT_DURATION_MIN,
   type WizardDay,
   type WizardBooking,
   type WizardBookingItem,
   type WizardChain,
+  type WizardOosRecord,
 } from '@/lib/utils/wizardSlots'
 
 export type WizardAvailabilityResponse = {
@@ -31,15 +33,9 @@ function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
 
-function isOosActiveOn(
-  oos: { created_at: string; expected_return_date: string | null; returned_at: string | null },
-  date: string,
-): boolean {
-  const created = oos.created_at.slice(0, 10)
-  if (created > date) return false
-  if (oos.returned_at && oos.returned_at.slice(0, 10) <= date) return false
-  if (oos.expected_return_date && oos.expected_return_date <= date) return false
-  return true
+function parseStrictInt(s: string | null | undefined): number {
+  if (s === null || s === undefined || !/^\d+$/.test(s)) return NaN
+  return parseInt(s, 10)
 }
 
 export async function GET(request: Request) {
@@ -56,22 +52,22 @@ export async function GET(request: Request) {
   const preferredStart = url.searchParams.get('preferred_start') ?? undefined
 
   if (!itemId) return NextResponse.json({ error: 'item_id required' }, { status: 400 })
-  const quantity = quantityRaw ? parseInt(quantityRaw, 10) : NaN
+  const quantity = parseStrictInt(quantityRaw)
   if (!Number.isInteger(quantity) || quantity < 1) {
     return NextResponse.json({ error: 'quantity must be a positive integer' }, { status: 400 })
   }
   if (!/^\d{5}$/.test(zip)) {
     return NextResponse.json({ error: 'zip_code must be 5 digits' }, { status: 400 })
   }
-  const year = yearRaw ? parseInt(yearRaw, 10) : NaN
-  const month = monthRaw ? parseInt(monthRaw, 10) : NaN
+  const year = parseStrictInt(yearRaw)
+  const month = parseStrictInt(monthRaw)
   if (!Number.isInteger(year) || year < 2020 || year > 2100) {
     return NextResponse.json({ error: 'year out of range' }, { status: 400 })
   }
   if (!Number.isInteger(month) || month < 1 || month > 12) {
     return NextResponse.json({ error: 'month must be 1-12' }, { status: 400 })
   }
-  const durationMin = durationRaw ? parseInt(durationRaw, 10) : DEFAULT_DURATION_MIN
+  const durationMin = durationRaw ? parseStrictInt(durationRaw) : DEFAULT_DURATION_MIN
   if (!Number.isInteger(durationMin) || durationMin < 30 || durationMin > 480) {
     return NextResponse.json({ error: 'duration_minutes out of range' }, { status: 400 })
   }
@@ -85,11 +81,19 @@ export async function GET(request: Request) {
 
   const [equipmentRes, bookingsRes, bookingItemsRes, chainsRes, oosRes] = await Promise.all([
     supabase.from('equipment').select('id, name, total_qty, custom_setup_min, custom_cleanup_min').eq('id', itemId).single(),
+    // Captures every booking that overlaps the requested month:
+    //   • event_date within the month                                 (branch 1)
+    //   • end_date within or after monthStart, event_date <= monthEnd (branch 2 — multi-day spanning)
+    // Limitation: linked drop-off/pickup pairs (separate rows, end_date null on each)
+    // where one half lies outside the month are not joined here. Wizard accuracy
+    // at month boundaries for those bookings is approximate.
     supabase
       .from('bookings')
       .select('id, chain, event_date, end_date, start_time, end_time, status, event_type, linked_booking_id, customer_name')
       .or(`and(event_date.gte.${monthStart},event_date.lte.${monthEnd}),and(end_date.gte.${monthStart},event_date.lte.${monthEnd})`)
       .neq('status', 'canceled'),
+    // Fetched globally for itemId; bookings outside the month are filtered out
+    // at scoring time via activeBookings. Acceptable at current data volumes.
     supabase.from('booking_items').select('booking_id, item_id, qty').eq('item_id', itemId),
     supabase.from('chains').select('id, name, color').eq('is_active', true).order('name'),
     supabase.from('equipment_oos').select('quantity, created_at, expected_return_date, returned_at').eq('equipment_id', itemId),
@@ -114,7 +118,7 @@ export async function GET(request: Request) {
     qty: bi.qty,
   }))
   const chains: WizardChain[] = (chainsRes.data ?? []) as WizardChain[]
-  const oosRecords = oosRes.data ?? []
+  const oosRecords: WizardOosRecord[] = (oosRes.data ?? []) as WizardOosRecord[]
 
   const totalDays = daysInMonth(year, month)
   const days: WizardDay[] = []

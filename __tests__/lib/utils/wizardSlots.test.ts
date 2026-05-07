@@ -3,9 +3,11 @@ import {
   resolveBufferMin,
   timeToMin,
   minToTime,
+  isOosActiveOn,
   type WizardBooking,
   type WizardBookingItem,
   type WizardChain,
+  type WizardOosRecord,
   type ComputeDayInput,
 } from '@/lib/utils/wizardSlots'
 
@@ -281,5 +283,31 @@ describe('computeDay — output shape', () => {
     expect(events).toHaveLength(2)
     expect(events[0]).toEqual({ start: '08:00', end: '09:00', customer_name: 'Alice' })
     expect(events[1]).toEqual({ start: '10:00', end: '11:00', customer_name: 'Bob' })
+  })
+})
+
+const makeOos = (o: Partial<WizardOosRecord> = {}): WizardOosRecord => ({
+  quantity: 1,
+  created_at: '2026-06-01T00:00:00Z',
+  expected_return_date: null,
+  returned_at: null,
+  ...o,
+})
+
+describe('isOosActiveOn', () => {
+  it('inactive when created after the date', () => {
+    expect(isOosActiveOn(makeOos({ created_at: '2026-06-15T00:00:00Z' }), '2026-06-10')).toBe(false)
+  })
+  it('active when created on the date with no return info', () => {
+    expect(isOosActiveOn(makeOos({ created_at: '2026-06-10T08:00:00Z' }), '2026-06-10')).toBe(true)
+  })
+  it('inactive once returned_at <= date (return-day same as date is back)', () => {
+    expect(isOosActiveOn(makeOos({ returned_at: '2026-06-10T12:00:00Z' }), '2026-06-10')).toBe(false)
+  })
+  it('inactive when expected_return_date <= date', () => {
+    expect(isOosActiveOn(makeOos({ expected_return_date: '2026-06-10' }), '2026-06-10')).toBe(false)
+  })
+  it('active when expected_return_date is strictly after date', () => {
+    expect(isOosActiveOn(makeOos({ expected_return_date: '2026-06-11' }), '2026-06-10')).toBe(true)
   })
 })
