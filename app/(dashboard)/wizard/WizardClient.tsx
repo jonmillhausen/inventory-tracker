@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, Star } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -12,6 +13,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useWizardAvailability, type WizardQueryParams } from '@/lib/queries/wizard'
+import type { WizardDay, WizardSlot } from '@/lib/utils/wizardSlots'
+import type { WizardAvailabilityResponse } from '@/app/api/wizard/availability/route'
 
 type EquipmentOption = {
   id: string
@@ -21,6 +24,124 @@ type EquipmentOption = {
   categories: string[] | null
   is_active: boolean
 }
+
+// ─── MonthCalendar helpers ────────────────────────────────────────────────────
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function formatTime12(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`
+}
+
+function isPastDate(year: number, month: number, day: number, today: Date): boolean {
+  const cellDate = new Date(year, month - 1, day)
+  const todayMid = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return cellDate < todayMid
+}
+
+type CalendarProps = {
+  year: number
+  month: number
+  data: WizardAvailabilityResponse | undefined
+  isLoading: boolean
+  onPrevMonth: () => void
+  onNextMonth: () => void
+  onDayClick: (day: WizardDay) => void
+}
+
+function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth, onDayClick }: CalendarProps) {
+  const today = new Date()
+  const firstOfMonth = new Date(year, month - 1, 1)
+  const startWeekday = firstOfMonth.getDay()
+  const totalDays = new Date(year, month, 0).getDate()
+
+  const cells: (WizardDay | null)[] = []
+  for (let i = 0; i < startWeekday; i++) cells.push(null)
+  for (let d = 1; d <= totalDays; d++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    cells.push(data?.days.find(x => x.date === dateStr) ?? {
+      date: dateStr,
+      available_inventory: 0,
+      chains: [],
+    })
+  }
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const monthName = firstOfMonth.toLocaleString('default', { month: 'long', year: 'numeric' })
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <button type="button" onClick={onPrevMonth} className="p-1 hover:bg-gray-100 rounded" aria-label="Previous month">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <h2 className="text-lg font-semibold">{monthName}</h2>
+        <button type="button" onClick={onNextMonth} className="p-1 hover:bg-gray-100 rounded" aria-label="Next month">
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded">
+        {WEEKDAYS.map(w => (
+          <div key={w} className="bg-gray-50 text-xs font-medium text-center py-1">{w}</div>
+        ))}
+        {cells.map((cell, i) => {
+          if (!cell) return <div key={i} className="bg-white min-h-[88px]" />
+
+          const dayNum = parseInt(cell.date.slice(8, 10), 10)
+          const past = isPastDate(year, month, dayNum, today)
+          const totalSlots = cell.chains.reduce((sum, c) => sum + c.slots.length, 0)
+          const allSlots: WizardSlot[] = cell.chains.flatMap(c => c.slots)
+          const top3 = [...allSlots]
+            .sort((a, b) => {
+              if (a.starred !== b.starred) return a.starred ? -1 : 1
+              if (a.score !== b.score) return b.score - a.score
+              return a.start.localeCompare(b.start)
+            })
+            .slice(0, 3)
+
+          const unavailable = !past && cell.available_inventory <= 0
+
+          return (
+            <button
+              key={i}
+              type="button"
+              disabled={past}
+              onClick={() => !past && onDayClick(cell)}
+              className={`bg-white min-h-[88px] text-left p-1 ${past ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+            >
+              <div className="text-xs font-medium">{dayNum}</div>
+              {isLoading ? (
+                <div className="mt-1 h-3 w-12 bg-gray-200 animate-pulse rounded" />
+              ) : unavailable ? (
+                <div className="mt-1 text-[10px] text-red-600 font-medium">Unavailable</div>
+              ) : (
+                <>
+                  <div className="mt-1 space-y-0.5">
+                    {top3.map((s, j) => (
+                      <div key={j} className="text-[10px] truncate flex items-center gap-0.5">
+                        {s.starred && <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500 shrink-0" />}
+                        <span>{formatTime12(s.start)} – {formatTime12(s.end)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {totalSlots > 3 && (
+                    <div className="text-[10px] text-blue-600 mt-0.5">+ {totalSlots - 3} more</div>
+                  )}
+                </>
+              )}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── End MonthCalendar ────────────────────────────────────────────────────────
 
 const DURATIONS: { label: string; value: number }[] = [
   { label: '1 hour', value: 60 },
@@ -52,6 +173,7 @@ export function WizardClient({ equipment }: { equipment: EquipmentOption[] }) {
   const [durationMin, setDurationMin] = useState<number>(90)
   const [preferredStart, setPreferredStart] = useState<string>('')
   const [submittedParams, setSubmittedParams] = useState<WizardQueryParams | null>(null)
+  const [selectedDay, setSelectedDay] = useState<WizardDay | null>(null)
   const [calMonth, setCalMonth] = useState<{ year: number; month: number }>({
     year: today.getFullYear(),
     month: today.getMonth() + 1,
@@ -156,18 +278,20 @@ export function WizardClient({ equipment }: { equipment: EquipmentOption[] }) {
 
       {error && <div className="text-red-600 text-sm">Error: {(error as Error).message}</div>}
 
-      {/* Calendar grid is added in Task 5 */}
-      <div data-testid="calendar-placeholder">
-        {!submittedParams && (
-          <div className="text-sm text-gray-500">Select a game and click Find Availability to see the calendar.</div>
-        )}
-        {submittedParams && isFetching && (
-          <div className="text-sm text-gray-500">Loading availability…</div>
-        )}
-        {submittedParams && data && (
-          <pre className="text-xs">{JSON.stringify(data.month, null, 2)}</pre>
-        )}
-      </div>
+      {!submittedParams && <div className="text-sm text-gray-500">Select a game and click Find Availability to see the calendar.</div>}
+      {submittedParams && (
+        <MonthCalendar
+          year={calMonth.year}
+          month={calMonth.month}
+          data={data}
+          isLoading={isFetching}
+          onPrevMonth={() => setCalMonth(m => m.month === 1 ? { year: m.year - 1, month: 12 } : { year: m.year, month: m.month - 1 })}
+          onNextMonth={() => setCalMonth(m => m.month === 12 ? { year: m.year + 1, month: 1 } : { year: m.year, month: m.month + 1 })}
+          onDayClick={setSelectedDay}
+        />
+      )}
+      {/* WizardDayDetailModal is added in Task 6 */}
+      {selectedDay ? null : null}
     </div>
   )
 }
