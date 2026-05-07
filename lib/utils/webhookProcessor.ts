@@ -171,12 +171,18 @@ export interface WebhookResolution {
 }
 
 /**
- * Strip parentheticals and extra whitespace, then lowercase.
- * "Bounce House (15x15)" → "bounce house"
+ * Strip BBCode tags ([b]…[/b], [i]…[/i], etc.), parentheticals, and extra
+ * whitespace, then lowercase. Pricing-summary text from Zenbooker often arrives
+ * with BBCode formatting (e.g. "[b]Laser Tag[/b] (10 blasters)") that must be
+ * stripped before substring matching against zenbooker_modifier_name.
+ *   "[b]Laser Tag[/b] (10 blasters)" → "laser tag"
+ *   "Bounce House (15x15)"           → "bounce house"
  */
 function normalizeForMatch(name: string): string {
   return name
+    .replace(/\[\/?\w+\]/g, '')
     .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase()
 }
@@ -385,8 +391,11 @@ export function resolveWebhookItems(
             if (!mm.item_id) continue
             if (seen.has(mm.item_id)) continue
             seen.add(mm.item_id)
-            // Use the parsed quantity from the description prefix when available.
-            const qty = (option.quantity !== undefined && option.quantity > 0)
+            // Honor use_customer_qty: when false, the mapping owns the quantity
+            // (e.g. bundle row "Laser Tag (10 blasters)" sets default_qty=10 even
+            // though the parsed pricing-summary qty is 1). When true, prefer the
+            // parsed Nx quantity (e.g. "16x Bubble Balls") over default_qty.
+            const qty = mm.use_customer_qty && option.quantity !== undefined && option.quantity > 0
               ? option.quantity
               : mm.default_qty
             resolvedItems.push({ item_id: mm.item_id, qty, is_sub_item: false, parent_item_id: null })

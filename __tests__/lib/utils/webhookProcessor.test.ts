@@ -307,6 +307,72 @@ describe('resolveWebhookItems', () => {
     expect(result.resolvedItems[0].item_id).toBe('mega_jenga')
   })
 
+  it('strips BBCode and matches modifier name from pricing_summary text', () => {
+    // 2-Game Party Bundle scenario: pricing_summary text wraps the option name
+    // in BBCode tags. After normalization, the modifier_name "Laser Tag" must
+    // substring-match into "[b]laser tag[/b]".
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: '2-Game Party Bundle',
+      pricing_summary: [
+        { type: 'service_option', description: '[b]Laser Tag[/b] (10 blasters)', amount: 0 },
+      ],
+    }
+    const sm = makeServiceMapping({
+      zenbooker_service_id: 'svc1',
+      zenbooker_modifier_id: 'opt_lt',
+      zenbooker_modifier_name: 'Laser Tag',
+      item_id: 'elite_laser_tag',
+      default_qty: 10,
+      use_customer_qty: false,
+    })
+    const result = resolveWebhookItems([svc], [], [sm], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0]).toEqual({ item_id: 'elite_laser_tag', qty: 10, is_sub_item: false, parent_item_id: null })
+  })
+
+  it('honors use_customer_qty=false in name-match path (uses default_qty, not parsed qty)', () => {
+    // Without honoring use_customer_qty, the parser's default quantity=1 would
+    // override the mapping's authoritative default_qty=10.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: '2-Game Party Bundle',
+      pricing_summary: [
+        { type: 'service_option', description: 'Bubble Ball (10 bubbles)', amount: 0 },
+      ],
+    }
+    const sm = makeServiceMapping({
+      zenbooker_service_id: 'svc1',
+      zenbooker_modifier_id: 'opt_bb',
+      zenbooker_modifier_name: 'Bubble Ball',
+      item_id: 'bubbleball',
+      default_qty: 10,
+      use_customer_qty: false,
+    })
+    const result = resolveWebhookItems([svc], [], [sm], [])
+    expect(result.resolvedItems[0].qty).toBe(10)
+  })
+
+  it('honors use_customer_qty=true in name-match path (uses parsed Nx qty)', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Bubble Ball',
+      pricing_summary: [
+        { type: 'service_option', description: '16x Bubble Balls', amount: 720 },
+      ],
+    }
+    const sm = makeServiceMapping({
+      zenbooker_service_id: 'svc1',
+      zenbooker_modifier_id: 'opt_bb',
+      zenbooker_modifier_name: 'Bubble Balls',
+      item_id: 'bubbleball',
+      default_qty: 10,
+      use_customer_qty: true,
+    })
+    const result = resolveWebhookItems([svc], [], [sm], [])
+    expect(result.resolvedItems[0].qty).toBe(16)
+  })
+
   it('modifier match + skip in same service: items from modifier, skip consumes its option', () => {
     // Dartboard with a paid add-on (cornhole → item) and a skip (generator → nothing)
     const svc: ZenbookerService = {

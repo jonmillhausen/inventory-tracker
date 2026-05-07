@@ -419,7 +419,10 @@ function parseV1Job(job: V1Job): ParsedJob {
         const text = qtyMatch ? qtyMatch[2].trim() : desc
         const tl   = text.toLowerCase()
 
-        if (tl.includes('elite laser tag')) {
+        // Zenbooker renamed the Elite variant to "Advanced Laser Tag" in newer
+        // payloads; both names refer to the same equipment so we map them to
+        // the same synthetic option ID.
+        if (tl.includes('elite laser tag') || tl.includes('advanced laser tag')) {
           syntheticOptions.push({ id: 'v1_lt_elite', text, quantity: qty })
         } else if (tl.includes('laser tag lite')) {
           syntheticOptions.push({ id: 'v1_lt_lite',  text, quantity: qty })
