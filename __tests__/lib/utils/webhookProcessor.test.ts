@@ -373,6 +373,65 @@ describe('resolveWebhookItems', () => {
     expect(result.resolvedItems[0].qty).toBe(16)
   })
 
+  it('does not fire base mapping for an item already covered by a modifier path (Christy bug)', () => {
+    // Real-world bug: Bubble Ball service has a BASE mapping → bubbleball
+    // (use_customer_qty=true) AND a modifier-name mapping for "Bubble Balls"
+    // → bubbleball (use_customer_qty=true, default_qty=10). When the
+    // pricing_summary stream is ordered with an unmappable option FIRST
+    // (e.g. "Book Online Today"), the base path fires for bubbleball x1
+    // BEFORE the modifier-name match runs for "20x Bubble Balls" — the
+    // results sum to 21 instead of 20. Base must skip items already covered.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Bubble Ball',
+      pricing_summary: [
+        { type: 'service_option', description: 'Book Online Today', amount: 0 },
+        { type: 'service_option', description: '20x Bubble Balls', amount: 980 },
+        { type: 'service_option', description: '1 Hour', amount: 0 },
+      ],
+    }
+    const baseSm = makeServiceMapping({
+      id: 'base',
+      zenbooker_service_id: 'svc1',
+      zenbooker_modifier_id: null,
+      zenbooker_modifier_name: null,
+      zenbooker_service_name: 'Bubble Ball',
+      item_id: 'bubbleball',
+      default_qty: 1,
+      use_customer_qty: true,
+    })
+    const modSm = makeServiceMapping({
+      id: 'mod',
+      zenbooker_service_id: 'svc1',
+      zenbooker_modifier_id: 'opt_bb',
+      zenbooker_modifier_name: 'Bubble Balls',
+      item_id: 'bubbleball',
+      default_qty: 10,
+      use_customer_qty: true,
+    })
+    const result = resolveWebhookItems([svc], [], [baseSm, modSm], [])
+    expect(result.resolvedItems).toHaveLength(1)
+    expect(result.resolvedItems[0]).toEqual({ item_id: 'bubbleball', qty: 20, is_sub_item: false, parent_item_id: null })
+  })
+
+  it('still fires base for items NOT covered by any modifier path', () => {
+    // Defense check: a service with base→foam_machine and a modifier "Cornhole"→cornhole
+    // must produce BOTH foam_machine (from base) AND cornhole (from modifier).
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([
+        { id: 'opt_cornhole', text: 'Cornhole', price: 25 },
+        { id: 'unmapped_opt',  text: '4 Hours',  price: 0 },
+      ]),
+    }
+    const baseSm = makeServiceMapping({ id: 'b', zenbooker_modifier_id: null, item_id: 'foam_machine' })
+    const modSm  = makeServiceMapping({ id: 'm', zenbooker_modifier_id: 'opt_cornhole', item_id: 'cornhole' })
+    const result = resolveWebhookItems([svc], [], [baseSm, modSm], [])
+    const items = result.resolvedItems.map(r => r.item_id).sort()
+    expect(items).toEqual(['cornhole', 'foam_machine'])
+  })
+
   it('modifier match + skip in same service: items from modifier, skip consumes its option', () => {
     // Dartboard with a paid add-on (cornhole → item) and a skip (generator → nothing)
     const svc: ZenbookerService = {

@@ -339,6 +339,39 @@ export function resolveWebhookItems(
     // for all remaining options in the same service.
     const resolvedCountBefore = resolvedItems.length
 
+    // Pre-pass: compute the set of item_ids that the modifier-id and
+    // name-match paths will resolve for this service. The base mapping
+    // (step 2) must NOT also fire for these — otherwise an unmappable
+    // option earlier in the option stream (e.g. "Book Online Today") fires
+    // base→bubbleball x1, and a later "20x Bubble Balls" modifier fires
+    // bubbleball x20, producing bubbleball x21 after deduplicateItems sums.
+    // The pre-pass is order-independent and only inspects mapping data.
+    const itemsCoveredByModifierPaths = new Set<string>()
+    for (const option of allOptions) {
+      const ms = serviceMappings.filter(
+        m => m.zenbooker_service_id === svc.service_id && m.zenbooker_modifier_id === option.id
+      )
+      if (ms.length > 0) {
+        for (const m of ms) {
+          if (!m.is_skip && m.item_id) itemsCoveredByModifierPaths.add(m.item_id)
+        }
+        continue
+      }
+      if (option.id === '') {
+        const normText = normalizeForMatch(option.text)
+        const nm = serviceMappings.filter(
+          m =>
+            m.zenbooker_service_id === svc.service_id &&
+            m.zenbooker_modifier_id !== null &&
+            m.zenbooker_modifier_name !== null &&
+            normText.includes(normalizeForMatch(m.zenbooker_modifier_name))
+        )
+        for (const m of nm) {
+          if (!m.is_skip && m.item_id) itemsCoveredByModifierPaths.add(m.item_id)
+        }
+      }
+    }
+
     for (const option of allOptions) {
       // 1. Modifier-specific mappings: ALL rows for (service_id, option.id).
       //    Multiple rows are allowed — e.g. one option can map to two equipment items.
@@ -420,6 +453,9 @@ export function resolveWebhookItems(
         for (const bm of baseMappings) {
           if (bm.is_skip || !bm.item_id) continue
           if (seen.has(bm.item_id)) continue
+          // Skip base rows whose item is already covered by a modifier or
+          // name-match path — those are authoritative for that item.
+          if (itemsCoveredByModifierPaths.has(bm.item_id)) continue
           seen.add(bm.item_id)
           const qty = bm.use_customer_qty && customerQtyOption
             ? (customerQtyOption.quantity ?? bm.default_qty)
