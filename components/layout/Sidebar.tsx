@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Flag,
+  WandSparkles,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAdmin } from '@/lib/auth/roles'
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { label: 'Chain Loading', href: '/chains',        icon: Truck        },
   { label: 'Equipment',     href: '/equipment',     icon: Package      },
   { label: 'Bookings',      href: '/bookings',      icon: CheckSquare  },
+  { label: 'Chain Wizard', href: '/wizard',        icon: WandSparkles },
 ] as const
 
 interface SidebarProps {
