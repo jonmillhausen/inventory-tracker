@@ -98,7 +98,9 @@ function MonthCalendar({ year, month, data, isLoading, onPrevMonth, onNextMonth,
               onClick={() => !past && onDayClick(cell)}
               className={`bg-white min-h-[88px] text-left p-1 ${past ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
             >
-              <div className="text-xs font-medium">{dayNum}</div>
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-sm bg-black text-white text-xs font-medium">
+                {dayNum}
+              </span>
               {isLoading ? (
                 <div className="mt-1 h-3 w-12 bg-gray-200 animate-pulse rounded" />
               ) : unavailable ? (
