@@ -36,6 +36,7 @@ const START_TIMES: string[] = (() => {
   const out: string[] = []
   for (let h = 7; h <= 23; h++) {
     for (const m of [0, 30]) {
+      if (h === 23 && m === 30) continue
       out.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
     }
   }
