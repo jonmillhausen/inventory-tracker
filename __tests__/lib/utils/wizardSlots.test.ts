@@ -283,8 +283,8 @@ describe('computeDay — output shape', () => {
     }))
     const events = result.chains[0].existing_events
     expect(events).toHaveLength(2)
-    expect(events[0]).toEqual({ start: '08:00', end: '09:00', customer_name: 'Alice' })
-    expect(events[1]).toEqual({ start: '10:00', end: '11:00', customer_name: 'Bob' })
+    expect(events[0]).toEqual({ booking_id: 'b1', start: '08:00', end: '09:00', customer_name: 'Alice' })
+    expect(events[1]).toEqual({ booking_id: 'b2', start: '10:00', end: '11:00', customer_name: 'Bob' })
   })
 })
 

@@ -22,7 +22,7 @@ export type WizardChainDay = {
   chain_id: string
   chain_name: string
   chain_color: string
-  existing_events: { start: string; end: string; customer_name: string }[]
+  existing_events: { booking_id: string; start: string; end: string; customer_name: string }[]
   slots: WizardSlot[]
 }
 
@@ -231,6 +231,7 @@ export function computeDay(input: ComputeDayInput): WizardDay {
     const existingEvents = chainBookings
       .filter(b => isSameDayBooking(b, date) && b.start_time && b.end_time)
       .map(b => ({
+        booking_id: b.id,
         start: b.start_time!,
         end: b.end_time!,
         customer_name: b.customer_name,
