@@ -83,6 +83,8 @@ interface V1Response {
 const LASER_TAG_V1_SERVICE_ID    = '1747883952074x309158420488483400'
 const LAWN_GAMES_V1_SERVICE_ID   = '1751332967401x820543194421858200'
 const OBSTACLE_COURSE_V1_SERVICE_ID = '1749611522093x499322152628127740'
+const GAGA_BALL_PIT_V1_SERVICE_ID = '1779135222412x556660967984274000'
+const GEL_BLASTER_V1_SERVICE_ID   = '1779144002752x492273329001131600'
 
 // Internal admin/logistics service names — exact matches (lowercase).
 // Individual services with these names are silently filtered out.
@@ -393,13 +395,14 @@ function parseV1Job(job: V1Job): ParsedJob {
       continue
     }
 
-    // 4. Gaga Pit → synthetic service_id
-    // TODO: replace 'v1:gaga_pit' with the actual service_id once confirmed via:
-    //   SELECT raw_payload->'services' FROM webhook_logs
-    //   WHERE action = 'job.import' AND result_detail LIKE '%unmapped: Gaga%' LIMIT 1;
-    if (nameLower.includes('gaga')) {
+    // 4. Gaga Pit. Prefer the real Zenbooker service_id (migration 030 adds a
+    //    BASE mapping for it); fall back to the v1:gaga_pit synthetic for
+    //    older payloads that arrive name-only without service_id.
+    if (svc.service_id === GAGA_BALL_PIT_V1_SERVICE_ID || nameLower.includes('gaga')) {
       services.push({
-        service_id:         'v1:gaga_pit',
+        service_id:         svc.service_id === GAGA_BALL_PIT_V1_SERVICE_ID
+                              ? svc.service_id
+                              : 'v1:gaga_pit',
         service_name:       svcName,
         service_selections: [],
       })
@@ -424,7 +427,8 @@ function parseV1Job(job: V1Job): ParsedJob {
         // the same synthetic option ID.
         if (tl.includes('elite laser tag') || tl.includes('advanced laser tag')) {
           syntheticOptions.push({ id: 'v1_lt_elite', text, quantity: qty })
-        } else if (tl.includes('laser tag lite')) {
+        } else if (tl.includes('laser tag lite') || tl.includes('youth laser tag')) {
+          // "Youth Laser Tag" is a newer name variant for the lite tagger.
           syntheticOptions.push({ id: 'v1_lt_lite',  text, quantity: qty })
         }
       }
@@ -585,6 +589,15 @@ function parseV1Job(job: V1Job): ParsedJob {
         service_selections: [],
       })
       continue
+    }
+
+    // 8.6 Gel Blaster — customer-input qty lives in service_fields. The
+    //      generic path at step 10 preserves those options; the BASE mapping
+    //      for GEL_BLASTER_V1_SERVICE_ID (use_customer_qty=true) picks up the
+    //      chosen qty. Patch service_id when the payload arrives name-only so
+    //      the BASE mapping still fires.
+    if (nameLower.includes('gel blaster') && svc.service_id !== GEL_BLASTER_V1_SERVICE_ID) {
+      svc.service_id = GEL_BLASTER_V1_SERVICE_ID
     }
 
     // 9. Lawn Games — skip if service has no priced selections
