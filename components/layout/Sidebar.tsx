@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Flag,
   WandSparkles,
+  Calculator,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { canAdmin } from '@/lib/auth/roles'
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { label: 'Availability',  href: '/availability', icon: CalendarDays },
   { label: 'Schedule',      href: '/schedule',      icon: Clock        },
   { label: 'Chain Wizard',  href: '/wizard',        icon: WandSparkles },
+  { label: 'Pricing Calculator', href: '/pricing',  icon: Calculator   },
   { label: '4-Week Audit',  href: '/audit',         icon: Search       },
   { label: 'Chain Loading', href: '/chains',        icon: Truck        },
   { label: 'Equipment',     href: '/equipment',     icon: Package      },
