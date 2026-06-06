@@ -22,6 +22,10 @@ interface Props {
 
 const FALLBACK_TRAVEL_MIN = 30
 
+// Arena Pickup is an internal fleet-return lane; overlapping pickups are expected
+// and must not raise a schedule-overlap warning (mirrors the Schedule board).
+const ARENA_PICKUP_CHAIN_ID = 'arena_pickup'
+
 function todayStr(): string {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
@@ -88,6 +92,7 @@ function computeDayCell(
   // Overlap: per chain, check if any booking sequence has travel+setup overlap (30-min fallback)
   let hasOverlap = false
   for (const chain of chains) {
+    if (chain.id === ARENA_PICKUP_CHAIN_ID) continue
     const chainBookings = active
       .filter(b => b.chain === chain.id)
       .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? ''))

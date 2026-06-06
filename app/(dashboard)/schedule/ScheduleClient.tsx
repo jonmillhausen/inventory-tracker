@@ -25,6 +25,12 @@ interface Props {
 }
 
 const BASE_ADDRESS = '4811 Benson Ave, Arbutus, MD 21227'
+// The Arena Pickup chain is an internal fleet-return lane, not a delivery route.
+// It renders as a neutral/gray column labeled "Arena Pickups" and is exempt from
+// schedule-overlap detection (overlapping pickups are expected, not a conflict).
+const ARENA_PICKUP_CHAIN_ID = 'arena_pickup'
+const ARENA_PICKUP_LABEL = 'Arena Pickups'
+const NEUTRAL_COLOR = '#9ca3af'
 const START_H = 6
 const END_H = 23
 const PX_PER_MIN = 1.2
@@ -183,14 +189,17 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   }
 
   const columns: ScheduleCol[] = useMemo(() => {
-    const chainCols: ScheduleCol[] = chains.map(c => ({
-      id: c.id,
-      name: c.name,
-      color: c.color,
-      bookings: activeBookings
-        .filter(b => b.chain === c.id)
-        .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
-    }))
+    const chainCols: ScheduleCol[] = chains.map(c => {
+      const isArenaPickup = c.id === ARENA_PICKUP_CHAIN_ID
+      return {
+        id: c.id,
+        name: isArenaPickup ? ARENA_PICKUP_LABEL : c.name,
+        color: isArenaPickup ? NEUTRAL_COLOR : c.color,
+        bookings: activeBookings
+          .filter(b => b.chain === c.id)
+          .sort((a, b) => (a.start_time ?? '').localeCompare(b.start_time ?? '')),
+      }
+    })
 
     const unassigned = activeBookings.filter(b => !b.chain)
     if (unassigned.length > 0) {
@@ -315,6 +324,8 @@ export function ScheduleClient({ initialData, initialChains, initialEquipment }:
   const columnOverlaps = useMemo(() => {
     const result = new Map<string, OverlapWindow[]>()
     for (const col of columns) {
+      // Arena Pickups overlap by design — never flag them as schedule conflicts.
+      if (col.id === ARENA_PICKUP_CHAIN_ID) continue
       const evts = col.bookings
       const windows: OverlapWindow[] = []
       for (let i = 1; i < evts.length; i++) {
