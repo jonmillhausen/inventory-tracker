@@ -220,11 +220,11 @@ export async function POST(request: Request) {
       }
 
       if (action === 'job.rescheduled') {
-        const { eventDate, startTime, endTime, address } = extractBookingFields(payload.data)
+        const { eventDate, endDate, startTime, endTime, address } = extractBookingFields(payload.data)
 
         const { error: updateErr } = await supabase
           .from('bookings')
-          .update({ event_date: eventDate, start_time: startTime, end_time: endTime, address })
+          .update({ event_date: eventDate, end_date: endDate, start_time: startTime, end_time: endTime, address })
           .eq('id', bookingId)
 
         if (updateErr) {
@@ -368,7 +368,7 @@ export async function POST(request: Request) {
     }
 
     const services = payload.data.services ?? []
-    const { customerName, address, eventDate, startTime, endTime } = extractBookingFields(payload.data)
+    const { customerName, address, eventDate, endDate, startTime, endTime } = extractBookingFields(payload.data)
     const eventType = resolveEventType(services, customerName)
 
     const resolution = resolveWebhookItems(
@@ -406,7 +406,7 @@ export async function POST(request: Request) {
           customer_name: customerName,
           address,
           event_date: eventDate,
-          end_date: null,
+          end_date: endDate,
           start_time: startTime,
           end_time: endTime,
           chain: chainId,

@@ -262,6 +262,50 @@ describe('resolveWebhookItems', () => {
     const result = extractBookingFields(payload as any)
     expect(result.startTime).toBe('05:00')
     expect(result.endTime).toBe('07:00')
+    expect(result.endDate).toBeNull()
+  })
+
+  it('overnight wrap sets end_date = event_date + 1 (audit P0-8c)', () => {
+    // 22:00 ET start + 4h → calcEndTime wraps to "02:00". Previously the
+    // booking was written with end_date null, creating an inverted time
+    // window that blocked nothing in the wizard.
+    const payload = {
+      customer: { name: 'Late Night Lock-In' },
+      service_address: { formatted: '123 Test Ave' },
+      start_date: '2026-06-16T02:00:00.000Z', // = 2026-06-15 22:00 EDT
+      timezone: 'America/New_York',
+      estimated_duration_seconds: 4 * 3600,
+      time_slot: { start_time: '22:00', end_time: null },
+    }
+    const result = extractBookingFields(payload as any)
+    expect(result.eventDate).toBe('2026-06-15')
+    expect(result.endTime).toBe('02:00')
+    expect(result.endDate).toBe('2026-06-16')
+  })
+
+  it('payload-provided end_time before start_time also sets end_date next day', () => {
+    const payload = {
+      customer: { name: 'Late Night Lock-In' },
+      service_address: { formatted: '123 Test Ave' },
+      start_date: '2026-06-16T02:00:00.000Z',
+      timezone: 'America/New_York',
+      time_slot: { start_time: '23:00', end_time: '01:00' },
+    }
+    const result = extractBookingFields(payload as any)
+    expect(result.endDate).toBe('2026-06-16')
+  })
+
+  it('month/year rollover: Dec 31 overnight wraps to Jan 1', () => {
+    const payload = {
+      customer: { name: 'NYE' },
+      service_address: { formatted: '123 Test Ave' },
+      start_date: '2027-01-01T03:00:00.000Z', // = 2026-12-31 22:00 EST
+      timezone: 'America/New_York',
+      time_slot: { start_time: '22:00', end_time: '00:30' },
+    }
+    const result = extractBookingFields(payload as any)
+    expect(result.eventDate).toBe('2026-12-31')
+    expect(result.endDate).toBe('2027-01-01')
   })
 
   it('base mapping fires at most once even when multiple options go unmatched', () => {

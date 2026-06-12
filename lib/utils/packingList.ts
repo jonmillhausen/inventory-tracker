@@ -60,18 +60,33 @@ export function calculatePackingList(
   // Step 3: Filter to parent equipment items only (sub-items are derived from links)
   const activeItems = bookingItems.filter(bi => allActiveIds.has(bi.booking_id) && !bi.is_sub_item)
 
-  // Step 4: Per item_id — compute dropQty (sum) and coordQty (max)
+  // Step 4: Per item_id — compute dropQty (sum) and coordQty (max).
+  //
+  // P0-8(d): coordinated MAX is taken across BOOKINGS, not across raw
+  // booking_items rows — one booking carrying two rows of the same item
+  // (e.g. base mapping qty 10 + add-on modifier qty 5) physically needs the
+  // SUM of its rows (15); the MAX-for-reuse rule applies between bookings.
   const dropQtyMap = new Map<string, number>()
   const coordQtyMap = new Map<string, number>()
+  // item_id → (booking_id → summed qty within that booking)
+  const coordPerBooking = new Map<string, Map<string, number>>()
 
   for (const bi of activeItems) {
     if (dropIds.has(bi.booking_id)) {
       dropQtyMap.set(bi.item_id, (dropQtyMap.get(bi.item_id) ?? 0) + bi.qty)
     }
     if (coordIds.has(bi.booking_id)) {
-      const existing = coordQtyMap.get(bi.item_id) ?? 0
-      coordQtyMap.set(bi.item_id, Math.max(existing, bi.qty))
+      let perBooking = coordPerBooking.get(bi.item_id)
+      if (!perBooking) {
+        perBooking = new Map()
+        coordPerBooking.set(bi.item_id, perBooking)
+      }
+      perBooking.set(bi.booking_id, (perBooking.get(bi.booking_id) ?? 0) + bi.qty)
     }
+  }
+
+  for (const [itemId, perBooking] of coordPerBooking) {
+    coordQtyMap.set(itemId, Math.max(...perBooking.values()))
   }
 
   // Step 5: Collect all parent item IDs with non-zero qty
@@ -95,7 +110,13 @@ export function calculatePackingList(
   //
   // For each link (parent → sub, loadout_qty):
   //   drop contribution  = parentDropQty  × loadout_qty  (summed across all linked parents)
-  //   coord contribution = parentCoordQty × loadout_qty  (max across all linked parents)
+  //   coord contribution = parentCoordQty × loadout_qty  (summed across all linked parents)
+  //
+  // P0-8(a): coordinated contributions SUM across distinct parents — both
+  // parents load onto the truck simultaneously, so a shared sub-item (e.g. a
+  // charging station serving Elite Laser Tag AND Arrow Tag) needs both
+  // parents' sets. MAX only ever applies across bookings of the SAME parent,
+  // which is already folded into coordQtyMap upstream.
   //
   // The primary parent for display grouping is the first contributing parent encountered.
   const subDropQtyMap = new Map<string, number>()
@@ -117,10 +138,7 @@ export function calculatePackingList(
       }
     }
     if (coordContrib > 0) {
-      const existing = subCoordQtyMap.get(link.sub_item_id) ?? 0
-      if (coordContrib > existing) {
-        subCoordQtyMap.set(link.sub_item_id, coordContrib)
-      }
+      subCoordQtyMap.set(link.sub_item_id, (subCoordQtyMap.get(link.sub_item_id) ?? 0) + coordContrib)
       if (!subPrimaryParentMap.has(link.sub_item_id)) {
         subPrimaryParentMap.set(link.sub_item_id, link.parent_id)
       }

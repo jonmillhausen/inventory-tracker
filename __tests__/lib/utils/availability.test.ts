@@ -85,6 +85,28 @@ describe('isBookingActiveOnDate', () => {
     const b = makeBooking({ event_date: '2026-03-20', end_date: null, status: 'canceled' })
     expect(isBookingActiveOnDate(b, '2026-03-20')).toBe(false)
   })
+
+  // P0-8(c) acceptance: now that the webhook persists end_date for
+  // midnight-crossing bookings, the 4am overnight-cutoff rule applies.
+  it('overnight coordinated booking ending before 4am counts only on event_date', () => {
+    const b = makeBooking({
+      event_type: 'coordinated',
+      event_date: '2026-06-15', end_date: '2026-06-16',
+      start_time: '22:00', end_time: '02:00',
+    })
+    expect(isBookingActiveOnDate(b, '2026-06-15')).toBe(true)
+    expect(isBookingActiveOnDate(b, '2026-06-16')).toBe(false)
+  })
+
+  it('overnight coordinated booking ending after 4am counts on both days', () => {
+    const b = makeBooking({
+      event_type: 'coordinated',
+      event_date: '2026-06-15', end_date: '2026-06-16',
+      start_time: '22:00', end_time: '06:00',
+    })
+    expect(isBookingActiveOnDate(b, '2026-06-15')).toBe(true)
+    expect(isBookingActiveOnDate(b, '2026-06-16')).toBe(true)
+  })
 })
 
 describe('calculateAvailability', () => {

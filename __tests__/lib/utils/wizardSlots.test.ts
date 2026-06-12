@@ -1,5 +1,6 @@
 import {
   computeDay,
+  expandLinkedSpans,
   resolveBufferMin,
   timeToMin,
   minToTime,
@@ -154,6 +155,78 @@ describe('computeDay — chain conflict', () => {
       })],
     }))
     expect(result.chains[0].slots).toHaveLength(0)
+  })
+})
+
+describe('computeDay — overnight bookings (audit P0-8c)', () => {
+  it('end_time earlier than start_time still blocks the evening', () => {
+    // 22:00–02:00 lock-in, end_date null (the webhook wrote these before the
+    // fix). Pre-fix the blocking window inverted ({start: 1245, end: 225})
+    // and overlapped nothing — every evening slot was offered on a fully
+    // occupied chain.
+    const result = computeDay(baseInput({
+      bookings: [makeBooking({ start_time: '22:00', end_time: '02:00' })],
+      bookingItems: [makeItem({ booking_id: 'b1', item_id: 'other_item' })],
+    }))
+    const slots = result.chains[0].slots
+    // Blocking window: 22:00−45−30 = 20:45 → 26:00+45+30 = 27:15.
+    // Candidate occupied window = s−75 … s+90+75; conflict iff s+165 > 20:45.
+    expect(slots.find(s => s.start === '20:00')).toBeUndefined()
+    expect(slots.find(s => s.start === '18:30')).toBeUndefined()
+    // 18:00 candidate ends exactly at the window start → no overlap → offered
+    expect(slots.find(s => s.start === '18:00')).toBeDefined()
+    expect(slots.find(s => s.start === '08:00')).toBeDefined()
+  })
+})
+
+describe('expandLinkedSpans — dropoff→pickup spans (audit P0-8b)', () => {
+  const dropoff = (o: Partial<WizardBooking> = {}) => makeBooking({
+    id: 'drop1', event_type: 'dropoff', event_date: '2026-06-10',
+    start_time: '10:00', end_time: '10:30', linked_booking_id: 'pick1', ...o,
+  })
+  const pickup = (o: Partial<WizardBooking> = {}) => makeBooking({
+    id: 'pick1', event_type: 'pickup', event_date: '2026-06-13',
+    start_time: '09:00', end_time: '09:30', linked_booking_id: 'drop1', ...o,
+  })
+
+  it('expands a dropoff to its linked pickup date', () => {
+    const [d, p] = expandLinkedSpans([dropoff(), pickup()])
+    expect(d.end_date).toBe('2026-06-13')
+    // pickup itself is not expanded backwards (its link points at the dropoff)
+    expect(p.end_date).toBeNull()
+  })
+
+  it('does not expand to a canceled pickup', () => {
+    const [d] = expandLinkedSpans([dropoff(), pickup({ status: 'canceled' })])
+    expect(d.end_date).toBeNull()
+  })
+
+  it('does not invert when the linked pickup is dated before the dropoff', () => {
+    const [d] = expandLinkedSpans([dropoff(), pickup({ event_date: '2026-06-08' })])
+    expect(d.end_date).toBeNull()
+  })
+
+  it('dropoff linked to later pickup consumes inventory on intermediate days', () => {
+    // 10 of 10 cornhole dropped 6/10, picked up 6/13 — on 6/11 NOTHING is
+    // available, on any chain. Pre-fix the wizard offered all 10.
+    const bookings = expandLinkedSpans([
+      dropoff({ chain: 'chain-a' }),
+      pickup({ chain: 'chain-a' }),
+    ])
+    const result = computeDay(baseInput({
+      date: '2026-06-11',
+      itemId: 'cornhole',
+      totalQty: 10,
+      requestedQty: 1,
+      bookings,
+      bookingItems: [makeItem({ booking_id: 'drop1', item_id: 'cornhole', qty: 10 })],
+      chains: [makeChain({ id: 'chain-a' }), makeChain({ id: 'chain-b', name: 'Chain B' })],
+    }))
+    // chain-a: full-day block from the spanned dropoff; chain-b: global
+    // inventory check sees all 10 consumed during the spanned window.
+    for (const chain of result.chains) {
+      expect(chain.slots).toHaveLength(0)
+    }
   })
 })
 

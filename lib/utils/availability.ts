@@ -269,7 +269,13 @@ export function computeChainTimes(
 
     const { before, after } = getBookingSetupTimes(b, bookingItems, equipmentMap)
     const windowStart = minToTime(Math.max(0, timeToMinutes(b.start_time) - before))
-    const windowEnd = minToTime(timeToMinutes(b.end_time) + after)
+    // P0-8(c) defensive rule: end_time earlier than start_time = crossed
+    // midnight. Without the +24h the window end wraps to "00:xx" and loses
+    // every string max-comparison below; clamp display to end-of-day.
+    const startMin = timeToMinutes(b.start_time)
+    let endMin = timeToMinutes(b.end_time)
+    if (endMin < startMin) endMin += 24 * 60
+    const windowEnd = minToTime(Math.min(endMin + after, 24 * 60 - 1))
 
     if (!result[b.chain]) {
       result[b.chain] = { start: windowStart, end: windowEnd }

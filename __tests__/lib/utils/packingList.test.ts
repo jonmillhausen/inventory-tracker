@@ -218,6 +218,69 @@ describe('calculatePackingList', () => {
     expect(sub?.qty).toBe(5)
   })
 
+  test('sub-item linked to two COORDINATED parents sums contributions (audit P0-8a)', () => {
+    // Both parents load onto the truck simultaneously — a shared sub-item
+    // needs BOTH parents' sets. Pre-fix the coordinated path took MAX across
+    // parents and packed 3 instead of 5.
+    const eq2: EquipmentRow = { ...BASE_EQUIPMENT, id: 'eq2', name: 'Water Slide' }
+    const b1: BookingRow = { ...BASE_BOOKING, id: 'b1', event_type: 'coordinated' }
+    const b2: BookingRow = { ...BASE_BOOKING, id: 'b2', event_type: 'coordinated' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
+      { id: 'bi2', booking_id: 'b2', item_id: 'eq2', qty: 3, is_sub_item: false, parent_item_id: null },
+    ]
+    const links: SubItemLinkRow[] = [
+      { id: 'lnk1', sub_item_id: 'sub1', parent_id: 'eq1', loadout_qty: 1 },
+      { id: 'lnk2', sub_item_id: 'sub1', parent_id: 'eq2', loadout_qty: 1 },
+    ]
+    // coord: 2×1 + 3×1 = 5 (SUM across distinct parents, not max)
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT, eq2], [BASE_SUB_ITEM], links, 'chain_1', '2026-04-01')
+    const sub = result.find(r => r.itemId === 'sub1')
+    expect(sub?.qty).toBe(5)
+  })
+
+  test('one coordinated + one dropoff parent: contributions still sum across categories', () => {
+    const eq2: EquipmentRow = { ...BASE_EQUIPMENT, id: 'eq2', name: 'Water Slide' }
+    const b1: BookingRow = { ...BASE_BOOKING, id: 'b1', event_type: 'dropoff' }
+    const b2: BookingRow = { ...BASE_BOOKING, id: 'b2', event_type: 'coordinated' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 2, is_sub_item: false, parent_item_id: null },
+      { id: 'bi2', booking_id: 'b2', item_id: 'eq2', qty: 3, is_sub_item: false, parent_item_id: null },
+    ]
+    const links: SubItemLinkRow[] = [
+      { id: 'lnk1', sub_item_id: 'sub1', parent_id: 'eq1', loadout_qty: 1 },
+      { id: 'lnk2', sub_item_id: 'sub1', parent_id: 'eq2', loadout_qty: 1 },
+    ]
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT, eq2], [BASE_SUB_ITEM], links, 'chain_1', '2026-04-01')
+    const sub = result.find(r => r.itemId === 'sub1')
+    expect(sub?.qty).toBe(5) // drop 2 + coord 3
+  })
+
+  test('coordinated booking with two rows of the same item sums rows before MAX (audit P0-8d)', () => {
+    // One booking carrying base-mapping qty 10 + add-on modifier qty 5 of the
+    // same item physically needs 15. Pre-fix the per-ROW max packed 10.
+    const b1: BookingRow = { ...BASE_BOOKING, id: 'b1', event_type: 'coordinated' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 10, is_sub_item: false, parent_item_id: null },
+      { id: 'bi2', booking_id: 'b1', item_id: 'eq1', qty: 5, is_sub_item: false, parent_item_id: null },
+    ]
+    const result = calculatePackingList([b1], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
+    expect(result[0].qty).toBe(15)
+  })
+
+  test('per-booking row sums still MAX across bookings (audit P0-8d)', () => {
+    // Booking A: 10+5=15; booking B: 12 → MAX(15, 12) = 15.
+    const b1: BookingRow = { ...BASE_BOOKING, id: 'b1', event_type: 'coordinated' }
+    const b2: BookingRow = { ...BASE_BOOKING, id: 'b2', event_type: 'coordinated' }
+    const items: BookingItemRow[] = [
+      { id: 'bi1', booking_id: 'b1', item_id: 'eq1', qty: 10, is_sub_item: false, parent_item_id: null },
+      { id: 'bi2', booking_id: 'b1', item_id: 'eq1', qty: 5, is_sub_item: false, parent_item_id: null },
+      { id: 'bi3', booking_id: 'b2', item_id: 'eq1', qty: 12, is_sub_item: false, parent_item_id: null },
+    ]
+    const result = calculatePackingList([b1, b2], items, [BASE_EQUIPMENT], [], [], 'chain_1', '2026-04-01')
+    expect(result[0].qty).toBe(15)
+  })
+
   test('items with qty 0 are excluded from results', () => {
     const booking: BookingRow = { ...BASE_BOOKING }
     const items: BookingItemRow[] = [

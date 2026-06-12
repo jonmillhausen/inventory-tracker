@@ -151,6 +151,15 @@ function extractTimeFromStartDate(startDate: string | undefined, timezone: strin
   }
 }
 
+/**
+ * Add one calendar day to a YYYY-MM-DD string (UTC arithmetic — DST-safe).
+ */
+export function nextDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
 export function extractBookingFields(data: ZenbookerPayload['data']) {
   const customerName = data.customer?.name ?? ''
   const address = data.service_address?.formatted ?? ''
@@ -160,7 +169,17 @@ export function extractBookingFields(data: ZenbookerPayload['data']) {
   if (!endTime && startTime && data.estimated_duration_seconds) {
     endTime = calcEndTime(startTime, data.estimated_duration_seconds)
   }
-  return { customerName, address, eventDate, startTime, endTime }
+
+  // P0-8(c): an end time earlier than the start time means the event crosses
+  // midnight (calcEndTime wraps at 24h, e.g. 22:00 + 4h → "02:00"). Persist
+  // end_date = event_date + 1 so availability, the wizard, and the 4am
+  // overnight-cutoff rule all see the real span — previously end_date stayed
+  // null and the wrapped window blocked nothing.
+  const endDate = eventDate && startTime && endTime && endTime < startTime
+    ? nextDay(eventDate)
+    : null
+
+  return { customerName, address, eventDate, endDate, startTime, endTime }
 }
 
 export interface WebhookResolution {

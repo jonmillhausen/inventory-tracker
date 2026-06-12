@@ -155,6 +155,31 @@ export function isOosActiveOn(oos: WizardOosRecord, date: string): boolean {
 
 type Window = { start: number; end: number } // minutes from midnight
 
+const PICKUP_EVENT_TYPES = new Set(['pickup', 'arena_pickup'])
+
+/**
+ * P0-8(b): expand each booking linked to a pickup so its effective range runs
+ * through the pickup's event_date — equipment dropped at a customer site stays
+ * booked until collected. Mirrors isBookingActiveOnDate's map-aware logic in
+ * lib/utils/availability.ts; previously the wizard ignored linked_booking_id
+ * entirely and offered equipment sitting in the field.
+ *
+ * The input list must already contain the linked pickup rows (the route
+ * fetches any that fall outside the queried month).
+ */
+export function expandLinkedSpans(bookings: WizardBooking[]): WizardBooking[] {
+  const byId = new Map(bookings.map(b => [b.id, b]))
+  return bookings.map(b => {
+    if (!b.linked_booking_id || !b.event_date) return b
+    const linked = byId.get(b.linked_booking_id)
+    if (!linked || linked.status === 'canceled') return b
+    if (!PICKUP_EVENT_TYPES.has(linked.event_type)) return b
+    if (!linked.event_date || linked.event_date <= b.event_date) return b
+    const spanEnd = b.end_date && b.end_date > linked.event_date ? b.end_date : linked.event_date
+    return { ...b, end_date: spanEnd }
+  })
+}
+
 function bookingActiveOnDate(b: WizardBooking, date: string): boolean {
   if (b.status === 'canceled') return false
   if (b.event_date === date) return true
@@ -183,8 +208,15 @@ function bookingBlockingWindow(
     // no time → treat as full day to be safe
     return { start: 0, end: 24 * 60 }
   }
-  const s = timeToMin(b.start_time) - setupMin - TRAVEL_BUFFER_MIN
-  const e = timeToMin(b.end_time) + cleanupMin + TRAVEL_BUFFER_MIN
+  const startMin = timeToMin(b.start_time)
+  let endMin = timeToMin(b.end_time)
+  // P0-8(c) defensive rule: an end time earlier than the start time means the
+  // event crosses midnight (e.g. 22:00–02:00). Without this, the window
+  // inverts ({start: 1245, end: 225}) and overlaps NOTHING — the wizard
+  // offered every evening slot on a fully occupied chain.
+  if (endMin < startMin) endMin += 24 * 60
+  const s = startMin - setupMin - TRAVEL_BUFFER_MIN
+  const e = endMin + cleanupMin + TRAVEL_BUFFER_MIN
   return { start: s, end: e }
 }
 

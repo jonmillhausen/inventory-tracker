@@ -3,6 +3,7 @@ import { getSessionAndRole } from '@/lib/api/auth'
 import { createClient } from '@/lib/supabase/server'
 import {
   computeDay,
+  expandLinkedSpans,
   resolveBufferMin,
   isOosActiveOn,
   DEFAULT_DURATION_MIN,
@@ -111,7 +112,28 @@ export async function GET(request: Request) {
   const setupMin = resolveBufferMin(equipment.custom_setup_min)
   const cleanupMin = resolveBufferMin(equipment.custom_cleanup_min)
 
-  const bookings: WizardBooking[] = (bookingsRes.data ?? []) as WizardBooking[]
+  let bookings: WizardBooking[] = (bookingsRes.data ?? []) as WizardBooking[]
+
+  // P0-8(b): bookings linked to a pickup span through the pickup's date —
+  // equipment dropped at a customer site is NOT available in between. Fetch
+  // any linked rows that fall outside the queried month (this also closes the
+  // previously documented month-boundary limitation), then expand.
+  const presentIds = new Set(bookings.map(b => b.id))
+  const missingLinkedIds = Array.from(new Set(
+    bookings
+      .map(b => b.linked_booking_id)
+      .filter((id): id is string => !!id && !presentIds.has(id))
+  ))
+  if (missingLinkedIds.length > 0) {
+    const linkedRes = await supabase
+      .from('bookings')
+      .select('id, chain, event_date, end_date, start_time, end_time, status, event_type, linked_booking_id, customer_name')
+      .in('id', missingLinkedIds)
+    if (linkedRes.error) return NextResponse.json({ error: linkedRes.error.message }, { status: 500 })
+    bookings = [...bookings, ...((linkedRes.data ?? []) as WizardBooking[])]
+  }
+  bookings = expandLinkedSpans(bookings)
+
   const bookingItems: WizardBookingItem[] = (bookingItemsRes.data ?? []).map(bi => ({
     booking_id: bi.booking_id,
     item_id: bi.item_id,
