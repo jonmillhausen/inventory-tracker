@@ -361,7 +361,20 @@ export interface Database {
       }
     }
     Views: Record<string, never>
-    Functions: Record<string, never>
+    Functions: {
+      replace_booking_items: {
+        Args: {
+          p_booking_id: string
+          p_items: Array<{
+            item_id: string
+            qty: number
+            is_sub_item: boolean
+            parent_item_id: string | null
+          }>
+        }
+        Returns: number
+      }
+    }
     Enums: {
       user_role: UserRole
       booking_status: BookingStatus

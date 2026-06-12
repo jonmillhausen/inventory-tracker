@@ -238,20 +238,39 @@ export async function POST(request: Request) {
       }
 
       if (action === 'job.service_order.edited') {
-        const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
+        const [smRes, cmRes, eqRes] = await Promise.all([
           supabase.from('service_mappings').select('*'),
           supabase.from('chain_mappings').select('*'),
           supabase.from('equipment').select('id, name').eq('is_active', true),
         ])
+
+        // P0-2: a failed mappings fetch must abort — an empty list is
+        // indistinguishable from "no mappings exist" and silently strips items.
+        const fetchErr = smRes.error ?? cmRes.error ?? eqRes.error
+        if (fetchErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: `mapping fetch failed: ${fetchErr.message}` })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Mapping fetch failed' }, { status: 500 })
+        }
+        const serviceMappings = (smRes.data ?? []) as ServiceMappingRow[]
+        if (serviceMappings.length === 0) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: 'service_mappings returned 0 rows — refusing to process' })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'No service mappings available' }, { status: 500 })
+        }
 
         const services = payload.data.services ?? []
         const { customerName } = extractBookingFields(payload.data)
         const resolution = resolveWebhookItems(
           services,
           assignedStaff,
-          (serviceMappings ?? []) as ServiceMappingRow[],
-          (chainMappings ?? []) as ChainMappingRow[],
-          (equipmentRows ?? []) as Array<{ id: string; name: string }>,
+          serviceMappings,
+          (cmRes.data ?? []) as ChainMappingRow[],
+          (eqRes.data ?? []) as Array<{ id: string; name: string }>,
         )
 
         const { unmappedNames, resolvedItems, nameFallbacks } = resolution
@@ -281,13 +300,18 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Update failed' }, { status: 500 })
         }
 
-        // Replace booking_items
-        await supabase.from('booking_items').delete().eq('booking_id', bookingId)
+        // Replace booking_items atomically (delete+insert in one transaction)
         const dedupedItems = deduplicateItems(resolvedItems)
-        if (dedupedItems.length > 0) {
-          await supabase.from('booking_items').insert(
-            dedupedItems.map(item => ({ ...item, booking_id: bookingId }))
-          )
+        const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
+          p_booking_id: bookingId,
+          p_items: dedupedItems,
+        })
+        if (itemsErr) {
+          await supabase
+            .from('webhook_logs')
+            .update({ result: 'error', result_detail: `booking_items replace failed: ${itemsErr.message}`, booking_id: bookingId })
+            .eq('id', logId)
+          return NextResponse.json({ error: 'Items replace failed' }, { status: 500 })
         }
 
         const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
@@ -309,11 +333,30 @@ export async function POST(request: Request) {
 
   // ── job.created: full upsert ─────────────────────────────────────────────
   try {
-    const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
+    const [smRes, cmRes, eqRes] = await Promise.all([
       supabase.from('service_mappings').select('*'),
       supabase.from('chain_mappings').select('*'),
       supabase.from('equipment').select('id, name').eq('is_active', true),
     ])
+
+    // P0-2: a failed mappings fetch must abort — an empty list is
+    // indistinguishable from "no mappings exist" and silently strips items.
+    const fetchErr = smRes.error ?? cmRes.error ?? eqRes.error
+    if (fetchErr) {
+      await supabase
+        .from('webhook_logs')
+        .update({ result: 'error', result_detail: `mapping fetch failed: ${fetchErr.message}` })
+        .eq('id', logId)
+      return NextResponse.json({ error: 'Mapping fetch failed' }, { status: 500 })
+    }
+    const serviceMappings = (smRes.data ?? []) as ServiceMappingRow[]
+    if (serviceMappings.length === 0) {
+      await supabase
+        .from('webhook_logs')
+        .update({ result: 'error', result_detail: 'service_mappings returned 0 rows — refusing to process' })
+        .eq('id', logId)
+      return NextResponse.json({ error: 'No service mappings available' }, { status: 500 })
+    }
 
     const services = payload.data.services ?? []
     const { customerName, address, eventDate, startTime, endTime } = extractBookingFields(payload.data)
@@ -322,9 +365,9 @@ export async function POST(request: Request) {
     const resolution = resolveWebhookItems(
       services,
       assignedStaff,
-      (serviceMappings ?? []) as ServiceMappingRow[],
-      (chainMappings ?? []) as ChainMappingRow[],
-      (equipmentRows ?? []) as Array<{ id: string; name: string }>,
+      serviceMappings,
+      (cmRes.data ?? []) as ChainMappingRow[],
+      (eqRes.data ?? []) as Array<{ id: string; name: string }>,
     )
     const { chainId, resolvedItems, unmappedNames, nameFallbacks } = resolution
     const fallbackDetails = nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`)
@@ -372,13 +415,18 @@ export async function POST(request: Request) {
 
     const bookingId = booking.id
 
-    // Replace booking_items
-    await supabase.from('booking_items').delete().eq('booking_id', bookingId)
+    // Replace booking_items atomically (delete+insert in one transaction)
     const dedupedItems = deduplicateItems(resolvedItems)
-    if (dedupedItems.length > 0) {
-      await supabase.from('booking_items').insert(
-        dedupedItems.map(item => ({ ...item, booking_id: bookingId }))
-      )
+    const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
+      p_booking_id: bookingId,
+      p_items: dedupedItems,
+    })
+    if (itemsErr) {
+      await supabase
+        .from('webhook_logs')
+        .update({ result: 'error', result_detail: `booking_items replace failed: ${itemsErr.message}`, booking_id: bookingId })
+        .eq('id', logId)
+      return NextResponse.json({ error: 'Items replace failed' }, { status: 500 })
     }
 
     const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'

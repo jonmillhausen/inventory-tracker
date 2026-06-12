@@ -760,14 +760,30 @@ export async function POST(request: Request) {
 
   const supabase = createServiceRoleClient()
 
-  const [{ data: serviceMappings }, { data: chainMappings }, { data: equipmentRows }] = await Promise.all([
+  const [smRes, cmRes, eqRes] = await Promise.all([
     supabase.from('service_mappings').select('*'),
     supabase.from('chain_mappings').select('*'),
     supabase.from('equipment').select('id, name').eq('is_active', true),
   ])
-  const smRows = (serviceMappings ?? []) as ServiceMappingRow[]
-  const cmRows = (chainMappings ?? []) as ChainMappingRow[]
-  const eqRows = (equipmentRows ?? []) as Array<{ id: string; name: string }>
+
+  // P0-2: a failed mappings fetch must abort BEFORE the loop — processing a
+  // page of jobs against an empty mapping list silently strips every booking.
+  const mappingFetchErr = smRes.error ?? cmRes.error ?? eqRes.error
+  if (mappingFetchErr) {
+    return NextResponse.json(
+      { error: `Mapping fetch failed: ${mappingFetchErr.message}` },
+      { status: 502 }
+    )
+  }
+  const smRows = (smRes.data ?? []) as ServiceMappingRow[]
+  const cmRows = (cmRes.data ?? []) as ChainMappingRow[]
+  const eqRows = (eqRes.data ?? []) as Array<{ id: string; name: string }>
+  if (smRows.length === 0) {
+    return NextResponse.json(
+      { error: 'service_mappings returned 0 rows — refusing to import' },
+      { status: 502 }
+    )
+  }
 
   let imported = 0
   let skipped_canceled = 0
@@ -788,8 +804,25 @@ export async function POST(request: Request) {
         .maybeSingle()
 
       if (existingBooking) {
-        await supabase.from('booking_items').delete().eq('booking_id', existingBooking.id)
-        await supabase.from('bookings').delete().eq('id', existingBooking.id)
+        // P0-2: check both deletes — claiming "deleted" over a failed delete
+        // leaves a canceled booking live with no trace.
+        const { error: itemsDelErr } = await supabase.from('booking_items').delete().eq('booking_id', existingBooking.id)
+        const { error: bookingDelErr } = itemsDelErr
+          ? { error: itemsDelErr }
+          : await supabase.from('bookings').delete().eq('id', existingBooking.id)
+        if (bookingDelErr) {
+          errors++
+          error_details.push({ job_id: job.id, job_number: job.job_number ?? '', error: `cancel delete failed: ${bookingDelErr.message}` })
+          await supabase.from('webhook_logs').insert({
+            received_at:      new Date().toISOString(),
+            zenbooker_job_id: job.id,
+            action:           'job.import',
+            raw_payload:      job as unknown as Record<string, unknown>,
+            result:           'error',
+            result_detail:    `cancel delete failed: ${bookingDelErr.message}`,
+          })
+          continue
+        }
         await supabase.from('webhook_logs').insert({
           received_at:      new Date().toISOString(),
           zenbooker_job_id: job.id,
@@ -871,7 +904,8 @@ export async function POST(request: Request) {
         if (upsertErr || !booking) throw new Error(upsertErr?.message ?? 'upsert failed')
 
         // Clear any stale booking_items (no equipment for these event types)
-        await supabase.from('booking_items').delete().eq('booking_id', booking.id)
+        const { error: clearErr } = await supabase.from('booking_items').delete().eq('booking_id', booking.id)
+        if (clearErr) throw new Error(`booking_items clear failed: ${clearErr.message}`)
 
         // ── Link to matching drop-off booking ─────────────────────────────
         // Find the most recent drop-off or coordinated booking at the same
@@ -970,13 +1004,14 @@ export async function POST(request: Request) {
 
       const bookingId = booking.id
 
-      await supabase.from('booking_items').delete().eq('booking_id', bookingId)
+      // P0-2: atomic delete+insert; a failure throws into the per-job catch
+      // and is logged as result='error' instead of a false success.
       const dedupedItems = deduplicateItems(resolvedItems)
-      if (dedupedItems.length > 0) {
-        await supabase
-          .from('booking_items')
-          .insert(dedupedItems.map(item => ({ ...item, booking_id: bookingId })))
-      }
+      const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
+        p_booking_id: bookingId,
+        p_items: dedupedItems,
+      })
+      if (itemsErr) throw new Error(`booking_items replace failed: ${itemsErr.message}`)
 
       const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
       await supabase.from('webhook_logs').insert({
