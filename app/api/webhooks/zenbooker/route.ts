@@ -57,10 +57,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  // Timestamp check (if present, reject if > 5 minutes old)
+  // Timestamp check (if present, reject if > 24 hours old).
+  // P0-3: the window must comfortably cover Zenbooker's retry backoff —
+  // retries carry the ORIGINAL timestamp, so a tight window permanently
+  // rejects every retry of a delayed delivery (including the retries our
+  // own P0-2 500-responses now deliberately trigger).
   if (payload.timestamp) {
     const ageSec = Math.floor(Date.now() / 1000) - payload.timestamp
-    if (ageSec > 300 || ageSec < -300) {
+    if (ageSec > 86_400 || ageSec < -300) {
       return NextResponse.json({ error: 'Stale timestamp' }, { status: 400 })
     }
   }

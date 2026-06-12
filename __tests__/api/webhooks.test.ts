@@ -226,3 +226,19 @@ describe('POST /api/webhooks/zenbooker — P0-2 checked + atomic writes', () => 
     expect(calls.inserts).toHaveLength(0)
   })
 })
+
+describe('POST /api/webhooks/zenbooker — P0-3 staleness window', () => {
+  it('accepts a retry delivered 23 hours after the original timestamp', async () => {
+    installClient()
+    const timestamp = Math.floor(Date.now() / 1000) - 23 * 3600
+    const res = await POST(makeRequest(v3Payload({ timestamp })))
+    expect(res.status).toBe(200)
+  })
+
+  it('rejects a timestamp older than 24 hours', async () => {
+    installClient()
+    const timestamp = Math.floor(Date.now() / 1000) - 25 * 3600
+    const res = await POST(makeRequest(v3Payload({ timestamp })))
+    expect(res.status).toBe(400)
+  })
+})
