@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
-import { EQUIPMENT_KEY, SUB_ITEMS_KEY } from '@/lib/queries/equipment'
+import { EQUIPMENT_KEY, SUB_ITEMS_KEY, EQUIPMENT_OOS_SUMS_KEY, SUB_ITEM_OOS_SUMS_KEY } from '@/lib/queries/equipment'
 import { BOOKINGS_KEY } from '@/lib/queries/bookings'
 import { CHAINS_KEY } from '@/lib/queries/chains'
 
@@ -34,8 +34,14 @@ export function useRealtimeSync() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'issue_flag_items' }, () => {
         qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'out_of_service_items' }, () => {
-        qc.invalidateQueries({ queryKey: EQUIPMENT_KEY })
+      // P0-7: equipment_oos drives all OOS math (availability + equipment
+      // pages); the legacy out_of_service_items subscription invalidated keys
+      // for a table nothing reads.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'equipment_oos' }, () => {
+        qc.invalidateQueries({ queryKey: EQUIPMENT_OOS_SUMS_KEY })
+        qc.invalidateQueries({ queryKey: SUB_ITEM_OOS_SUMS_KEY })
+        qc.invalidateQueries({ queryKey: ['equipment_oos'], exact: false })
+        qc.invalidateQueries({ queryKey: ['sub_item_oos'], exact: false })
       })
       .subscribe()
 

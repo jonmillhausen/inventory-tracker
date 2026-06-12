@@ -317,37 +317,10 @@ export function useResolveIssueFlag() {
   })
 }
 
-export function useCreateOOS() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (body: { item_id: string; item_type: 'equipment' | 'sub_item'; qty: number; note: string; return_date?: string | null }) => {
-      const res = await fetch('/api/out-of-service', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: EQUIPMENT_KEY }),
-  })
-}
-
-export function useMarkOOSReturned() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/out-of-service/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ returned_at: new Date().toISOString() }),
-      })
-      if (!res.ok) throw new Error(await res.text())
-      return res.json()
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: EQUIPMENT_KEY }),
-  })
-}
+// P0-7: useCreateOOS/useMarkOOSReturned removed — they targeted the dead
+// /api/out-of-service routes writing the orphaned out_of_service_items table.
+// equipment_oos (useMarkOOS / useMarkSubItemOOS / useReturnFromOOS) is the
+// single OOS system.
 
 // Fetch active OOS records for one equipment item (used by OOSDetailModal)
 export function useEquipmentOOS(equipmentId: string) {
@@ -454,9 +427,10 @@ export function useSubItemOOS(subItemId: string) {
   })
 }
 
-export function useSubItemOOSSums() {
+export function useSubItemOOSSums(initialData?: Record<string, number>) {
   return useQuery({
     queryKey: SUB_ITEM_OOS_SUMS_KEY,
+    initialData,
     queryFn: async (): Promise<Record<string, number>> => {
       const supabase = createClient()
       const { data, error } = await supabase

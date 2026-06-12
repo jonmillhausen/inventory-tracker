@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
-import { useEquipment, useEquipmentSubItems, useEquipmentOOSSums, useEquipmentOOS } from '@/lib/queries/equipment'
+import { useEquipment, useEquipmentSubItems, useEquipmentOOSSums, useSubItemOOSSums, useEquipmentOOS } from '@/lib/queries/equipment'
 import { useBookings, type BookingsData } from '@/lib/queries/bookings'
 import { useChains } from '@/lib/queries/chains'
 import { usePersistedDate } from '@/lib/hooks/usePersistedDate'
@@ -31,6 +31,7 @@ interface Props {
   initialBookings: BookingsData
   initialChains: ChainRow[]
   initialOosSums?: Record<string, number>
+  initialSubOosSums?: Record<string, number>
 }
 
 function prevDay(date: string): string {
@@ -191,6 +192,7 @@ export function AvailabilityClient({
   initialBookings,
   initialChains,
   initialOosSums,
+  initialSubOosSums,
 }: Props) {
   const [selectedDate, setSelectedDate] = usePersistedDate('date:availability')
   const [search, setSearch] = useState('')
@@ -204,10 +206,16 @@ export function AvailabilityClient({
   const { data: bookingsData = initialBookings } = useBookings(initialBookings)
   const { data: chains = [] } = useChains(initialChains)
   const { data: oosSumsRaw = {} } = useEquipmentOOSSums(initialOosSums)
+  const { data: subOosSumsRaw = {} } = useSubItemOOSSums(initialSubOosSums)
 
   const oosMap = useMemo(
     () => new Map(Object.entries(oosSumsRaw)),
     [oosSumsRaw]
+  )
+
+  const subOosMap = useMemo(
+    () => new Map(Object.entries(subOosSumsRaw)),
+    [subOosSumsRaw]
   )
 
   const rows = useMemo(
@@ -217,9 +225,10 @@ export function AvailabilityClient({
       bookingsData.bookings,
       bookingsData.bookingItems,
       selectedDate,
-      oosMap
+      oosMap,
+      subOosMap
     ),
-    [equipment, subItems, bookingsData, selectedDate, oosMap]
+    [equipment, subItems, bookingsData, selectedDate, oosMap, subOosMap]
   )
 
   const chainTimes = useMemo(

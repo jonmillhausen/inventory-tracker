@@ -100,7 +100,11 @@ export function calculateAvailability(
   bookings: BookingRow[],
   bookingItems: BookingItemRow[],
   date: string,
-  oosMap?: Map<string, number>
+  oosMap?: Map<string, number>,
+  // P0-7: active equipment_oos sums keyed by sub_item_id. The legacy
+  // out_of_service counter columns are retired — incidents live in
+  // equipment_oos and are passed in here, same as oosMap for equipment.
+  subOosMap?: Map<string, number>
 ): AvailabilityRow[] {
   const bookingsById = new Map(bookings.map(b => [b.id, b]))
 
@@ -177,14 +181,15 @@ export function calculateAvailability(
 
       const sub_items = (subsByParent.get(e.id) ?? []).map(s => {
         const subBooked = bookedByItemId.get(s.id) ?? 0
+        const subOos = subOosMap?.get(s.id) ?? 0
         return {
           id: s.id,
           name: s.name,
           total_qty: s.total_qty,
-          out_of_service: s.out_of_service,
+          out_of_service: subOos,
           issue_flag: s.issue_flag,
           booked_qty: subBooked,
-          available_qty: Math.max(0, s.total_qty - s.out_of_service - subBooked),
+          available_qty: Math.max(0, s.total_qty - subOos - subBooked),
         }
       })
 

@@ -13,20 +13,22 @@ export async function POST(
   const body = await request.json()
   const { quantity = 1, issue_description = null, expected_return_date = null } = body
 
-  if (!quantity || quantity < 1) {
-    return NextResponse.json({ error: 'quantity must be at least 1' }, { status: 400 })
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    return NextResponse.json({ error: 'quantity must be a positive integer' }, { status: 400 })
   }
 
+  // P0-7: ONE row with quantity N. The previous N-rows insert followed by
+  // .single() returned a 500 for quantity > 1 AFTER the rows were inserted,
+  // inviting retry duplicates.
   const supabase = await createClient()
-  const rows = Array.from({ length: quantity }, () => ({
-    sub_item_id: subId,
-    quantity: 1,
-    issue_description,
-    expected_return_date: expected_return_date || null,
-  }))
   const { data, error } = await supabase
     .from('equipment_oos')
-    .insert(rows)
+    .insert({
+      sub_item_id: subId,
+      quantity,
+      issue_description,
+      expected_return_date: expected_return_date || null,
+    })
     .select()
     .single()
 

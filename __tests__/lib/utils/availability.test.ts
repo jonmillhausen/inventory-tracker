@@ -189,4 +189,47 @@ describe('calculateAvailability', () => {
     const result = calculateAvailability(equipment, subItems as any, [], [], '2026-03-20')
     expect(result[0].sub_items).toHaveLength(0)
   })
+
+  // Audit P0-7: sub-item OOS comes from active equipment_oos sums, NOT the
+  // legacy trigger-maintained counter column. Live failure this pins: goal_set
+  // had 3 units OOS in equipment_oos while its counter read 0 — invisible.
+  describe('sub-item OOS from equipment_oos sums (P0-7)', () => {
+    const goalSetFixture = () => ({
+      equipment: [makeEquipment({ id: 'hamster_ball_track', name: 'Hamster Ball Track', total_qty: 2 })],
+      subItems: [{
+        id: 'goal_set', parent_id: 'hamster_ball_track', name: 'Goal Set',
+        total_qty: 5, out_of_service: 0, issue_flag: 0, is_active: true,
+      }],
+    })
+
+    it('active sub-item OOS reduces available_qty', () => {
+      const { equipment, subItems } = goalSetFixture()
+      const subOosMap = new Map([['goal_set', 3]])
+      const result = calculateAvailability(equipment, subItems as any, [], [], '2026-06-15', undefined, subOosMap)
+      expect(result[0].sub_items[0].out_of_service).toBe(3)
+      expect(result[0].sub_items[0].available_qty).toBe(2)
+    })
+
+    it('sub-item OOS reduces available_qty without touching the counter column', () => {
+      // Stale counter claims 4 OOS; equipment_oos (the source of truth) has
+      // none active. The counter must be ignored entirely.
+      const { equipment } = goalSetFixture()
+      const subItems = [{
+        id: 'goal_set', parent_id: 'hamster_ball_track', name: 'Goal Set',
+        total_qty: 5, out_of_service: 4, issue_flag: 0, is_active: true,
+      }]
+      const result = calculateAvailability(equipment, subItems as any, [], [], '2026-06-15', undefined, new Map())
+      expect(result[0].sub_items[0].out_of_service).toBe(0)
+      expect(result[0].sub_items[0].available_qty).toBe(5)
+    })
+
+    it('sub-item OOS composes with booked quantity', () => {
+      const { equipment, subItems } = goalSetFixture()
+      const bookings = [makeBooking({ id: 'b1', event_date: '2026-06-15' })]
+      const items = [makeBookingItem({ booking_id: 'b1', item_id: 'goal_set', qty: 1, is_sub_item: true, parent_item_id: 'hamster_ball_track' })]
+      const subOosMap = new Map([['goal_set', 3]])
+      const result = calculateAvailability(equipment, subItems as any, bookings, items, '2026-06-15', undefined, subOosMap)
+      expect(result[0].sub_items[0].available_qty).toBe(1) // 5 - 3 oos - 1 booked
+    })
+  })
 })
