@@ -14,12 +14,20 @@ export default async function WebhookLogsPage() {
   const { data: profile } = await supabase.from('users').select('role').eq('id', user.id).single()
   if (!profile || profile.role !== 'admin') return <p className="text-red-600">Access denied</p>
 
-  const { data: logsData } = await supabase
-    .from('webhook_logs')
-    .select('*')
-    .order('received_at', { ascending: false })
-    .limit(200)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+  const [{ data: logsData }, { count: unmappedCount }] = await Promise.all([
+    supabase
+      .from('webhook_logs')
+      .select('*')
+      .order('received_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('webhook_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('result', 'unmapped_service')
+      .gte('received_at', sevenDaysAgo),
+  ])
   const logs = (logsData ?? []) as WebhookLogRow[]
 
-  return <WebhookLogsClient initialLogs={logs} />
+  return <WebhookLogsClient initialLogs={logs} unmappedCount7d={unmappedCount ?? 0} />
 }

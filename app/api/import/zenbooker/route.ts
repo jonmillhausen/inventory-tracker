@@ -961,20 +961,24 @@ export async function POST(request: Request) {
       const eventType = resolveEventType(services, customerName)
 
       const resolution = resolveWebhookItems(services, assignedStaff, smRows, cmRows, eqRows)
-      const { chainId, resolvedItems, unmappedNames, nameFallbacks } = resolution
+      const { chainId, resolvedItems, unmappedNames, nameFallbacks, baseFallbacks } = resolution
 
-      const status: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
-      const fallbackDetails = nameFallbacks.map(
-        f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`
-      )
-      let resultDetail: string | null = null
-      if (unmappedNames.length > 0) {
-        const parts = [`unmapped: ${unmappedNames.join(', ')}`]
-        if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
-        resultDetail = parts.join('; ')
-      } else if (fallbackDetails.length > 0) {
-        resultDetail = fallbackDetails.join('; ')
-      }
+      const dedupedItems = deduplicateItems(resolvedItems)
+      // P0-1: a non-pickup booking resolving to ZERO equipment can never be
+      // silently confirmed (pickup/arena paths are handled above).
+      const zeroItems = dedupedItems.length === 0 && eventType !== 'pickup' && eventType !== 'arena_pickup'
+      const flagged = unmappedNames.length > 0 || zeroItems
+
+      const status: 'confirmed' | 'needs_review' = flagged ? 'needs_review' : 'confirmed'
+      const fallbackDetails = [
+        ...nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`),
+        ...baseFallbacks.map(label => `base fallback: "${label}" consumed by base mapping`),
+      ]
+      const detailParts: string[] = []
+      if (unmappedNames.length > 0) detailParts.push(`unmapped: ${unmappedNames.join(', ')}`)
+      if (zeroItems) detailParts.push('no equipment resolved for non-pickup booking')
+      detailParts.push(...fallbackDetails)
+      const resultDetail: string | null = detailParts.length > 0 ? detailParts.join('; ') : null
 
       const { data: booking, error: upsertErr } = await supabase
         .from('bookings')
@@ -1006,14 +1010,13 @@ export async function POST(request: Request) {
 
       // P0-2: atomic delete+insert; a failure throws into the per-job catch
       // and is logged as result='error' instead of a false success.
-      const dedupedItems = deduplicateItems(resolvedItems)
       const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
         p_booking_id: bookingId,
         p_items: dedupedItems,
       })
       if (itemsErr) throw new Error(`booking_items replace failed: ${itemsErr.message}`)
 
-      const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
+      const webhookResult = flagged ? 'unmapped_service' : 'success'
       await supabase.from('webhook_logs').insert({
         received_at:      new Date().toISOString(),
         zenbooker_job_id: jobId,

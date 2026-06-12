@@ -2,7 +2,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useWebhookLogs } from '@/lib/queries/webhookLogs'
+import { useWebhookLogs, type WebhookResultFilter } from '@/lib/queries/webhookLogs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type { Database, WebhookResult } from '@/lib/types/database.types'
@@ -16,21 +16,57 @@ const RESULT_BADGE: Record<NonNullable<WebhookResult>, { label: string; classNam
   skipped: { label: 'Skipped', className: 'bg-gray-100 text-gray-600' },
 }
 
+const FILTER_OPTIONS: Array<{ value: WebhookResultFilter; label: string }> = [
+  { value: 'all', label: 'All results' },
+  { value: 'unmapped_service', label: 'Unmapped' },
+  { value: 'error', label: 'Error' },
+  { value: 'skipped', label: 'Skipped' },
+  { value: 'success', label: 'Success' },
+]
+
 interface Props {
   initialLogs: WebhookLogRow[]
+  unmappedCount7d: number
 }
 
-export function WebhookLogsClient({ initialLogs }: Props) {
-  const { data: logs = [], refetch, isFetching } = useWebhookLogs(initialLogs)
+export function WebhookLogsClient({ initialLogs, unmappedCount7d }: Props) {
+  const [resultFilter, setResultFilter] = useState<WebhookResultFilter>('all')
+  const { data: logs = [], refetch, isFetching } = useWebhookLogs(initialLogs, resultFilter)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Webhook Logs</h1>
-        <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
-          {isFetching ? 'Refreshing...' : 'Refresh'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <select
+            className="border rounded-md px-2 py-1.5 text-sm bg-white"
+            value={resultFilter}
+            onChange={e => setResultFilter(e.target.value as WebhookResultFilter)}
+            aria-label="Filter by result"
+          >
+            {FILTER_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            {isFetching ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </div>
+      </div>
+
+      <div
+        className={`border rounded-lg p-4 ${unmappedCount7d > 0 ? 'border-yellow-300 bg-yellow-50' : 'bg-gray-50'}`}
+      >
+        <p className="text-sm font-medium">
+          {unmappedCount7d > 0 ? '⚠️ ' : ''}
+          {unmappedCount7d} unmapped option{unmappedCount7d === 1 ? '' : 's'} in the last 7 days
+        </p>
+        <p className="text-xs text-gray-500 mt-1">
+          Unmapped results mean a booking arrived with services or options that have no
+          service-mapping row — its equipment may be incomplete. Add mappings (or is_skip rows
+          for ignorable options) in Settings → Service Mappings, then re-run the import.
+        </p>
       </div>
 
       <div className="border rounded-lg overflow-hidden">

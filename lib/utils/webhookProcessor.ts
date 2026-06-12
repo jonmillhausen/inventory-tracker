@@ -168,6 +168,10 @@ export interface WebhookResolution {
   resolvedItems: ResolvedItem[]
   unmappedNames: string[]
   nameFallbacks: NameFallback[]
+  // Option labels that had no modifier/name mapping and were consumed by the
+  // service's base mapping instead (e.g. a renamed modifier ID). Surfaced as a
+  // warning in result_detail so quantity degradation to default_qty is visible.
+  baseFallbacks: string[]
 }
 
 /**
@@ -244,6 +248,7 @@ export function resolveWebhookItems(
   const resolvedItems: ResolvedItem[] = []
   const unmappedNames: string[] = []
   const nameFallbacks: NameFallback[] = []
+  const baseFallbacks: string[] = []
 
   for (const svc of services) {
     const hasServiceFields = (svc.service_fields?.length ?? 0) > 0
@@ -463,6 +468,10 @@ export function resolveWebhookItems(
           resolvedItems.push({ item_id: bm.item_id, qty, is_sub_item: false, parent_item_id: null })
         }
         baseMappingPushed = true
+        // P0-1: this option had no mapping of its own — the base mapping
+        // absorbed it. If it was actually a renamed/re-created modifier, the
+        // quantity silently degraded to default_qty; record a warning.
+        baseFallbacks.push(`${svc.service_name} / ${option.text}`)
         continue
       }
 
@@ -480,13 +489,17 @@ export function resolveWebhookItems(
         }
       }
 
-      // 4. No match — silently skip. Options like service fees, group size,
-      //    duration, and booking method will never have equipment mappings
-      //    and should not trigger unmapped_service.
+      // 4. No match anywhere — record it (audit P0-1). A new service, renamed
+      //    modifier, or never-mapped option must surface as needs_review, not
+      //    silently produce a confirmed booking with missing equipment.
+      //    Known-ignorable options (duration, group size, booking method) are
+      //    silenced by adding is_skip mapping rows, which are consumed at
+      //    tier 1/1.5 and never reach this point.
+      unmappedNames.push(`${svc.service_name} / ${option.text}`)
     }
   }
 
-  return { chainId, resolvedItems, unmappedNames, nameFallbacks }
+  return { chainId, resolvedItems, unmappedNames, nameFallbacks, baseFallbacks }
 }
 
 /**

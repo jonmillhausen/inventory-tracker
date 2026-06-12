@@ -32,7 +32,7 @@ const withOptions = (options: Array<{ id: string; text: string; quantity?: numbe
 describe('resolveWebhookItems', () => {
   it('returns empty resolution for no services and no staff', () => {
     const result = resolveWebhookItems([], [], [], [])
-    expect(result).toEqual({ chainId: null, resolvedItems: [], unmappedNames: [], nameFallbacks: [] })
+    expect(result).toEqual({ chainId: null, resolvedItems: [], unmappedNames: [], nameFallbacks: [], baseFallbacks: [] })
   })
 
   it('resolves a standalone service with no options via base mapping', () => {
@@ -94,7 +94,11 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toHaveLength(0)
   })
 
-  it('silently skips unmatched options — price is irrelevant, only mappings matter', () => {
+  it('records every unmatched option on an unmapped service (audit P0-1 — inverted from old silent-skip behavior)', () => {
+    // OLD behavior (enshrined by the previous version of this test): unmatched
+    // options were silently dropped, producing a confirmed booking with zero
+    // equipment logged as success — the audit's headline P0. Now every option
+    // that reaches tier 4 is recorded as "{service_name} / {option.text}".
     const svc: ZenbookerService = {
       service_id: 'meta_svc',  // no mapping for this service
       service_name: 'Laser Tag',
@@ -107,7 +111,47 @@ describe('resolveWebhookItems', () => {
     }
     const result = resolveWebhookItems([svc], [], [makeServiceMapping()], [])
     expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toEqual([
+      'Laser Tag / 4+ Hours',
+      'Laser Tag / Large Group 26+',
+      'Laser Tag / Generator (required if no outlet nearby)',
+      'Laser Tag / Get a Custom Quote',
+    ])
+  })
+
+  it('renamed modifier on service WITH base mapping → base qty used AND fallback recorded', () => {
+    // The modifier was renamed/re-created in Zenbooker, so its ID no longer
+    // matches. The base mapping absorbs the option (quantity silently degrades
+    // to default_qty) — that degradation must be visible via baseFallbacks.
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([{ id: 'renamed_mod_id', text: 'Deluxe Foam Cannon', quantity: 3 }]),
+    }
+    const baseSm = makeServiceMapping() // base mapping → foam_machine, default_qty 1
+    const result = resolveWebhookItems([svc], [], [baseSm], [])
+    expect(result.resolvedItems).toEqual([
+      { item_id: 'foam_machine', qty: 1, is_sub_item: false, parent_item_id: null },
+    ])
     expect(result.unmappedNames).toHaveLength(0)
+    expect(result.baseFallbacks).toEqual(['Foam Party / Deluxe Foam Cannon'])
+  })
+
+  it('is_skip-consumed options do NOT appear in unmappedNames (noise regression guard)', () => {
+    const svc: ZenbookerService = {
+      service_id: 'svc1',
+      service_name: 'Foam Party',
+      ...withOptions([
+        { id: 'dur1', text: '2 Hours', price: 0 },
+        { id: 'grp1', text: 'Group Size 10-15', price: 0 },
+      ]),
+    }
+    const skipDur = makeServiceMapping({ id: 'skip1', zenbooker_modifier_id: 'dur1', item_id: null, is_skip: true, default_qty: 0 })
+    const skipGrp = makeServiceMapping({ id: 'skip2', zenbooker_modifier_id: 'grp1', item_id: null, is_skip: true, default_qty: 0 })
+    const result = resolveWebhookItems([svc], [], [skipDur, skipGrp], [])
+    expect(result.resolvedItems).toHaveLength(0)
+    expect(result.unmappedNames).toHaveLength(0)
+    expect(result.baseFallbacks).toHaveLength(0)
   })
 
   it('adds unmapped service name when no options and no base mapping found', () => {
@@ -117,17 +161,17 @@ describe('resolveWebhookItems', () => {
     expect(result.unmappedNames).toEqual(['Mystery Service'])
   })
 
-  it('silently skips an option that does not match any modifier or base mapping', () => {
+  it('records an option that does not match any modifier or base mapping (audit P0-1)', () => {
     const svc: ZenbookerService = {
       service_id: 'svc2',
       service_name: 'Game Bundle',
       ...withOptions([{ id: 'different_mod', text: 'Other Option', price: 25 }]),
     }
     const sm = makeServiceMapping({ zenbooker_service_id: 'svc2', zenbooker_modifier_id: 'mod1' })
-    // no base mapping, no modifier match, no equipment name match → silently skipped
+    // no base mapping, no modifier match, no equipment name match → recorded as unmapped
     const result = resolveWebhookItems([svc], [], [sm], [])
     expect(result.resolvedItems).toHaveLength(0)
-    expect(result.unmappedNames).toHaveLength(0)
+    expect(result.unmappedNames).toEqual(['Game Bundle / Other Option'])
   })
 
   it('resolves multiple options within a single service independently', () => {

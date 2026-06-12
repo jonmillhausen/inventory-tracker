@@ -227,6 +227,87 @@ describe('POST /api/webhooks/zenbooker — P0-2 checked + atomic writes', () => 
   })
 })
 
+describe('POST /api/webhooks/zenbooker — P0-1 unmapped detection + zero-item flagging', () => {
+  it('unknown service with options → needs_review and unmapped_service listing each option', async () => {
+    const { calls } = installClient()
+    const payload = v3Payload({}, {
+      services: [
+        {
+          service_id: 'svc-brand-new',
+          service_name: 'Axe Throwing Range',
+          service_selections: [{
+            selected_options: [
+              { id: 'opt1', text: '2 Lanes', price: 100 },
+              { id: 'opt2', text: 'Extra Hour', price: 50 },
+            ],
+          }],
+        },
+      ],
+    })
+    const res = await POST(makeRequest(payload))
+    expect(res.status).toBe(200)
+    expect(calls.upserts).toHaveLength(1)
+    expect(calls.upserts[0].row.status).toBe('needs_review')
+    const lastLog = calls.logUpdates[calls.logUpdates.length - 1]
+    expect(lastLog.result).toBe('unmapped_service')
+    expect(String(lastLog.result_detail)).toContain('Axe Throwing Range / 2 Lanes')
+    expect(String(lastLog.result_detail)).toContain('Axe Throwing Range / Extra Hour')
+  })
+
+  it('booking resolving to zero items (non-pickup) → needs_review, never silently confirmed', async () => {
+    // All options consumed by is_skip rows → zero items, zero unmapped names.
+    // Previously this produced status=confirmed + result=success.
+    const { calls } = installClient({
+      serviceMappings: {
+        data: [
+          {
+            id: 'skip1',
+            zenbooker_service_id: 'svc1',
+            zenbooker_service_name: 'Foam Party',
+            zenbooker_modifier_id: 'dur1',
+            zenbooker_modifier_name: '2 Hours',
+            item_id: null,
+            default_qty: 0,
+            use_customer_qty: false,
+            is_skip: true,
+            notes: '',
+          },
+        ],
+        error: null,
+      },
+    })
+    const payload = v3Payload({}, {
+      services: [
+        {
+          service_id: 'svc1',
+          service_name: 'Foam Party',
+          service_selections: [{ selected_options: [{ id: 'dur1', text: '2 Hours', price: 0 }] }],
+        },
+      ],
+    })
+    const res = await POST(makeRequest(payload))
+    expect(res.status).toBe(200)
+    expect(calls.upserts[0].row.status).toBe('needs_review')
+    const lastLog = calls.logUpdates[calls.logUpdates.length - 1]
+    expect(lastLog.result).toBe('unmapped_service')
+    expect(String(lastLog.result_detail)).toContain('no equipment resolved')
+  })
+
+  it('arena return with no services → zero items exempt, stays confirmed', async () => {
+    const { calls } = installClient()
+    const payload = v3Payload({}, {
+      customer: { name: 'Wonderfly Arena Return' },
+      services: [],
+    })
+    const res = await POST(makeRequest(payload))
+    expect(res.status).toBe(200)
+    expect(calls.upserts[0].row.status).toBe('confirmed')
+    expect(calls.upserts[0].row.event_type).toBe('arena_pickup')
+    const lastLog = calls.logUpdates[calls.logUpdates.length - 1]
+    expect(lastLog.result).toBe('success')
+  })
+})
+
 describe('POST /api/webhooks/zenbooker — P0-3 staleness window', () => {
   it('accepts a retry delivered 23 hours after the original timestamp', async () => {
     installClient()

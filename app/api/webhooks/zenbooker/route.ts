@@ -277,19 +277,25 @@ export async function POST(request: Request) {
           (eqRes.data ?? []) as Array<{ id: string; name: string }>,
         )
 
-        const { unmappedNames, resolvedItems, nameFallbacks } = resolution
-        const fallbackDetails = nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`)
+        const { unmappedNames, resolvedItems, nameFallbacks, baseFallbacks } = resolution
+        const fallbackDetails = [
+          ...nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`),
+          ...baseFallbacks.map(label => `base fallback: "${label}" consumed by base mapping`),
+        ]
 
-        const newStatus: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
         const eventType = resolveEventType(services, customerName)
-        let resultDetail: string | null = null
-        if (unmappedNames.length > 0) {
-          const parts = [`unmapped: ${unmappedNames.join(', ')}`]
-          if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
-          resultDetail = parts.join('; ')
-        } else if (fallbackDetails.length > 0) {
-          resultDetail = fallbackDetails.join('; ')
-        }
+        const dedupedItems = deduplicateItems(resolvedItems)
+        // P0-1: a non-pickup booking resolving to ZERO equipment can never be
+        // silently confirmed — that is the missing-truck failure mode.
+        const zeroItems = dedupedItems.length === 0 && eventType !== 'pickup' && eventType !== 'arena_pickup'
+        const flagged = unmappedNames.length > 0 || zeroItems
+
+        const newStatus: 'confirmed' | 'needs_review' = flagged ? 'needs_review' : 'confirmed'
+        const detailParts: string[] = []
+        if (unmappedNames.length > 0) detailParts.push(`unmapped: ${unmappedNames.join(', ')}`)
+        if (zeroItems) detailParts.push('no equipment resolved for non-pickup booking')
+        detailParts.push(...fallbackDetails)
+        const resultDetail: string | null = detailParts.length > 0 ? detailParts.join('; ') : null
 
         const { error: updateErr } = await supabase
           .from('bookings')
@@ -305,7 +311,6 @@ export async function POST(request: Request) {
         }
 
         // Replace booking_items atomically (delete+insert in one transaction)
-        const dedupedItems = deduplicateItems(resolvedItems)
         const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
           p_booking_id: bookingId,
           p_items: dedupedItems,
@@ -318,7 +323,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Items replace failed' }, { status: 500 })
         }
 
-        const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
+        const webhookResult = flagged ? 'unmapped_service' : 'success'
         await supabase
           .from('webhook_logs')
           .update({ result: webhookResult, result_detail: resultDetail, booking_id: bookingId })
@@ -373,18 +378,24 @@ export async function POST(request: Request) {
       (cmRes.data ?? []) as ChainMappingRow[],
       (eqRes.data ?? []) as Array<{ id: string; name: string }>,
     )
-    const { chainId, resolvedItems, unmappedNames, nameFallbacks } = resolution
-    const fallbackDetails = nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`)
+    const { chainId, resolvedItems, unmappedNames, nameFallbacks, baseFallbacks } = resolution
+    const fallbackDetails = [
+      ...nameFallbacks.map(f => `name fallback: ${f.optionId ?? '(no id)'} "${f.optionName}" → ${f.equipmentId}`),
+      ...baseFallbacks.map(label => `base fallback: "${label}" consumed by base mapping`),
+    ]
 
-    const status: 'confirmed' | 'needs_review' = unmappedNames.length > 0 ? 'needs_review' : 'confirmed'
-    let resultDetail: string | null = null
-    if (unmappedNames.length > 0) {
-      const parts = [`unmapped: ${unmappedNames.join(', ')}`]
-      if (fallbackDetails.length > 0) parts.push(...fallbackDetails)
-      resultDetail = parts.join('; ')
-    } else if (fallbackDetails.length > 0) {
-      resultDetail = fallbackDetails.join('; ')
-    }
+    const dedupedItems = deduplicateItems(resolvedItems)
+    // P0-1: a non-pickup booking resolving to ZERO equipment can never be
+    // silently confirmed — that is the missing-truck failure mode.
+    const zeroItems = dedupedItems.length === 0 && eventType !== 'pickup' && eventType !== 'arena_pickup'
+    const flagged = unmappedNames.length > 0 || zeroItems
+
+    const status: 'confirmed' | 'needs_review' = flagged ? 'needs_review' : 'confirmed'
+    const detailParts: string[] = []
+    if (unmappedNames.length > 0) detailParts.push(`unmapped: ${unmappedNames.join(', ')}`)
+    if (zeroItems) detailParts.push('no equipment resolved for non-pickup booking')
+    detailParts.push(...fallbackDetails)
+    const resultDetail: string | null = detailParts.length > 0 ? detailParts.join('; ') : null
 
     // Upsert booking
     const { data: booking, error: upsertErr } = await supabase
@@ -420,7 +431,6 @@ export async function POST(request: Request) {
     const bookingId = booking.id
 
     // Replace booking_items atomically (delete+insert in one transaction)
-    const dedupedItems = deduplicateItems(resolvedItems)
     const { error: itemsErr } = await supabase.rpc('replace_booking_items', {
       p_booking_id: bookingId,
       p_items: dedupedItems,
@@ -433,7 +443,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Items replace failed' }, { status: 500 })
     }
 
-    const webhookResult = unmappedNames.length > 0 ? 'unmapped_service' : 'success'
+    const webhookResult = flagged ? 'unmapped_service' : 'success'
     await supabase
       .from('webhook_logs')
       .update({ result: webhookResult, result_detail: resultDetail ?? null, booking_id: bookingId })
