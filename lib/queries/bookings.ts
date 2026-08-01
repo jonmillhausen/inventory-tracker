@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 import type { Database, EventType } from '@/lib/types/database.types'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
@@ -22,10 +23,16 @@ export function useBookings(initialData?: BookingsData) {
     queryKey: BOOKINGS_KEY,
     queryFn: async (): Promise<BookingsData> => {
       const supabase = createClient()
+      // Paged: both tables can exceed PostgREST's 1000-row cap, which
+      // truncates silently.  This hook re-fetches on mount and overwrites the
+      // server-rendered payload, so an unpaged read here re-broke every page
+      // even after the server components were fixed.
       const [{ data: bookings, error: bErr }, { data: bookingItems, error: biErr }] =
         await Promise.all([
-          supabase.from('bookings').select('*').order('event_date', { ascending: false }),
-          supabase.from('booking_items').select('*'),
+          fetchAll((from, to) =>
+            supabase.from('bookings').select('*').order('event_date', { ascending: false }).range(from, to)
+          ),
+          fetchAll((from, to) => supabase.from('booking_items').select('*').range(from, to)),
         ])
       if (bErr) throw bErr
       if (biErr) throw biErr

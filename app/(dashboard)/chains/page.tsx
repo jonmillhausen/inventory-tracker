@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 import { redirect } from 'next/navigation'
 import { ChainsClient } from './ChainsClient'
 import type { Database } from '@/lib/types/database.types'
@@ -26,8 +27,8 @@ export default async function ChainsPage() {
     { data: subItemLinks },
   ] = await Promise.all([
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
-    supabase.from('bookings').select('*'),
-    supabase.from('booking_items').select('*'),
+    fetchAll((from, to) => supabase.from('bookings').select('*').range(from, to)),
+    fetchAll((from, to) => supabase.from('booking_items').select('*').range(from, to)),
     supabase.from('equipment').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_items').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_item_links').select('*'),

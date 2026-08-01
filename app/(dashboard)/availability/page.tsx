@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 import { AvailabilityClient } from './AvailabilityClient'
 import type { Database } from '@/lib/types/database.types'
 
@@ -22,8 +23,8 @@ export default async function AvailabilityPage() {
   ] = await Promise.all([
     supabase.from('equipment').select('*').order('name'),
     supabase.from('equipment_sub_items').select('*').order('name'),
-    supabase.from('bookings').select('*').neq('status', 'canceled'),
-    supabase.from('booking_items').select('*'),
+    fetchAll((from, to) => supabase.from('bookings').select('*').neq('status', 'canceled').range(from, to)),
+    fetchAll((from, to) => supabase.from('booking_items').select('*').range(from, to)),
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_oos').select('equipment_id, quantity').not('equipment_id', 'is', null).is('returned_at', null),
     supabase.from('equipment_oos').select('sub_item_id, quantity').not('sub_item_id', 'is', null).is('returned_at', null),

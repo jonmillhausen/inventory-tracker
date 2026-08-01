@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 import { redirect } from 'next/navigation'
 import { AuditClient } from './AuditClient'
 import type { Database } from '@/lib/types/database.types'
@@ -25,8 +26,8 @@ export default async function AuditPage() {
     { data: chains },
     { data: equipment },
   ] = await Promise.all([
-    supabase.from('bookings').select('*').order('event_date', { ascending: false }),
-    supabase.from('booking_items').select('*'),
+    fetchAll((from, to) => supabase.from('bookings').select('*').order('event_date', { ascending: false }).range(from, to)),
+    fetchAll((from, to) => supabase.from('booking_items').select('*').range(from, to)),
     supabase.from('chains').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment').select('*').eq('is_active', true).order('name'),
   ])
