@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
+import { fetchAll } from '@/lib/supabase/fetchAll'
 import { calculatePackingList } from '@/lib/utils/packingList'
 import type { Database } from '@/lib/types/database.types'
 
@@ -74,8 +75,10 @@ export async function GET(
     { data: overrideRows, error: oErr },
     { data: noteRows, error: nErr },
   ] = await Promise.all([
-    supabase.from('bookings').select('*'),
-    supabase.from('booking_items').select('*'),
+    // Paged: both tables can exceed PostgREST's 1000-row cap, and a truncated
+    // read here means crews pack from an incomplete list.
+    fetchAll((from, to) => supabase.from('bookings').select('*').range(from, to)),
+    fetchAll((from, to) => supabase.from('booking_items').select('*').range(from, to)),
     supabase.from('equipment').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_items').select('*').eq('is_active', true).order('name'),
     supabase.from('equipment_sub_item_links').select('*'),
