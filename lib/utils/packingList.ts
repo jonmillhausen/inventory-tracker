@@ -19,22 +19,29 @@ export interface PackingListRow {
 const DROP_TYPES: EventType[] = ['dropoff', 'willcall']
 const COORD_TYPES: EventType[] = ['coordinated', 'pickup']
 
-// Tier multipliers for sub-item quantities based on parent equipment name slug.
+// Tier multipliers for sub-item quantities, keyed on equipment.id.
 // Tier 1 (per 10): floor(qty/10), min 1
 // Tier 2 (per 20): floor(qty/20), min 1
 // Tier 3 (default): qty as-is
-const TIER1_SLUGS = new Set(['bubble_ball', 'elite_laser_tag', 'arrow_tag'])
-const TIER2_SLUGS = new Set(['gel_tag', 'laser_tag_lite'])
+//
+// P1-5: these are equipment IDs, not name slugs. Keying on
+// slugify(equipment.name) meant a display-name edit silently changed packing
+// math: renaming "Gel Tag" to "Geltag" moved slug 'gel_tag' to 'geltag',
+// which missed TIER2 and dropped the item to Tier 3 — a 20-unit booking
+// packed 20 sets of every sub-item (400 masks, 600k gellets) instead of 1.
+// IDs are stable slugs and are never edited for presentation, so tier
+// membership can no longer drift out from under the calculation.
+//
+// Note 'bubbleball' has no underscore. Its old name-slug was 'bubble_ball',
+// which is why the name-keyed lookup happened to work for it and hid the
+// class of bug behind a coincidence.
+const TIER1_IDS = new Set(['bubbleball', 'elite_laser_tag', 'arrow_tag'])
+const TIER2_IDS = new Set(['geltag', 'laser_tag_lite'])
 
-function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
-}
-
-function getEffectiveParentQty(itemName: string, qty: number): number {
+export function getEffectiveParentQty(itemId: string, qty: number): number {
   if (qty <= 0) return 0
-  const slug = slugify(itemName)
-  if (TIER1_SLUGS.has(slug)) return Math.max(1, Math.floor(qty / 10))
-  if (TIER2_SLUGS.has(slug)) return Math.max(1, Math.floor(qty / 20))
+  if (TIER1_IDS.has(itemId)) return Math.max(1, Math.floor(qty / 10))
+  if (TIER2_IDS.has(itemId)) return Math.max(1, Math.floor(qty / 20))
   return qty
 }
 
@@ -126,10 +133,9 @@ export function calculatePackingList(
   for (const link of subItemLinks) {
     const parentDropQty = dropQtyMap.get(link.parent_id) ?? 0
     const parentCoordQty = coordQtyMap.get(link.parent_id) ?? 0
-    const parentName = equipmentMap.get(link.parent_id)?.name ?? ''
 
-    const dropContrib = getEffectiveParentQty(parentName, parentDropQty) * link.loadout_qty
-    const coordContrib = getEffectiveParentQty(parentName, parentCoordQty) * link.loadout_qty
+    const dropContrib = getEffectiveParentQty(link.parent_id, parentDropQty) * link.loadout_qty
+    const coordContrib = getEffectiveParentQty(link.parent_id, parentCoordQty) * link.loadout_qty
 
     if (dropContrib > 0) {
       subDropQtyMap.set(link.sub_item_id, (subDropQtyMap.get(link.sub_item_id) ?? 0) + dropContrib)

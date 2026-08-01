@@ -1,7 +1,10 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { createServiceRoleClient } from '@/lib/supabase/service-role'
 import { fetchAll } from '@/lib/supabase/fetchAll'
-import { calculatePackingList } from '@/lib/utils/packingList'
+// P1-5: the tier helper is imported rather than duplicated here. The local
+// copy had drifted out of sync with the display-name rename independently of
+// the shared one; sharing it makes that class of divergence impossible.
+import { calculatePackingList, getEffectiveParentQty } from '@/lib/utils/packingList'
 import type { Database } from '@/lib/types/database.types'
 
 type BookingRow = Database['public']['Tables']['bookings']['Row']
@@ -169,10 +172,9 @@ export async function GET(
     if (!parentItemId) return 0
     const parentQty = eventQtyForParent(bookingId, parentItemId)
     if (parentQty <= 0) return 0
-    const parentName = (equipment as EquipmentRow[]).find(e => e.id === parentItemId)?.name ?? ''
     const link = subItemLinksBySub.get(subItemId)
     if (!link) return 0
-    const baseQty = getEffectiveParentQty(parentName, parentQty) * link.loadout_qty
+    const baseQty = getEffectiveParentQty(parentItemId, parentQty) * link.loadout_qty
     return overrideMap.has(subItemId) ? overrideMap.get(subItemId) ?? baseQty : baseQty
   }
 
@@ -252,16 +254,6 @@ function fmt12(t: string | null | undefined): string {
   const [h, m] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${ampm}`
-}
-
-function getEffectiveParentQty(itemName: string, qty: number): number {
-  if (qty <= 0) return 0
-  const slug = itemName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
-  const tier1 = new Set(['bubble_ball', 'elite_laser_tag', 'arrow_tag'])
-  const tier2 = new Set(['gel_tag', 'laser_tag_lite'])
-  if (tier1.has(slug)) return Math.max(1, Math.floor(qty / 10))
-  if (tier2.has(slug)) return Math.max(1, Math.floor(qty / 20))
-  return qty
 }
 
 function formatEventType(eventType: string): string {
